@@ -159,7 +159,7 @@ const S = { uid:null, profile:null, day:null, dayKey:null, obStep:0, draft:{} };
 
 /* Der Boot-Screen bleibt mindestens so lange stehen, dass die Wortmarke
    ihre Einblendung zu Ende spielen kann — sonst blitzt er nur kurz auf. */
-const BOOT_MIN_MS = 2350;
+const BOOT_MIN_MS = 1850;
 const bootStart = Date.now();
 
 /* Statusleiste: während des Boot-Screens im Himmelblau, danach im hellen
