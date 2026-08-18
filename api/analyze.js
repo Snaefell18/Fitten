@@ -23,6 +23,10 @@ Vorgehen bei einem Foto:
 Der Nutzerkommentar korrigiert immer deine Bildschätzung, nicht umgekehrt.
 Bei Mengenangaben wie "halbe Portion" skalierst du entsprechend.
 
+4. Schätze zusätzlich die Makronährstoffe der gesamten Mahlzeit in Gramm:
+   pr = Eiweiß, ch = Kohlenhydrate, fa = Fett. Sie sollten grob zu den
+   Kalorien passen (Eiweiß und Kohlenhydrate je 4 kcal/g, Fett 9 kcal/g).
+
 Antworte ausschließlich mit reinem JSON, ohne Markdown, ohne Backticks,
 ohne Text davor oder danach, in genau diesem Format:
 
@@ -30,12 +34,15 @@ ohne Text davor oder danach, in genau diesem Format:
   "title": "kurzer Name des Gerichts auf Deutsch",
   "items": [{ "name": "Komponente", "amount": "180 g", "kcal": 290 }],
   "total_kcal": 640,
+  "pr": 38,
+  "ch": 52,
+  "fa": 24,
   "confidence": "hoch" | "mittel" | "niedrig",
   "note": "ein kurzer Satz, was du angenommen hast"
 }
 
-Ist auf dem Bild kein Essen zu sehen, gib total_kcal 0, confidence "niedrig"
-und erkläre das in note.`;
+Ist auf dem Bild kein Essen zu sehen, gib total_kcal 0, alle Makros 0,
+confidence "niedrig" und erkläre das in note.`;
 
 export const config = { maxDuration: 60 };
 
@@ -118,7 +125,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 700,
+        max_tokens: 800,
         system: SYSTEM,
         messages: [{ role: "user", content }]
       })
