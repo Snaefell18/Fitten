@@ -375,12 +375,20 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
    exakt an der Oberkante des Walrosses — über die volle Höhe gezogen bliebe
    er dort noch blau und es entstünde eine harte Kante. */
 .boot{position:fixed; inset:0; z-index:99; overflow:hidden; background:#F0F7FC;
-  display:flex; flex-direction:column}
-.boot .sky{flex:1 1 auto; min-height:0; display:flex;
-  align-items:center; justify-content:center;
+  /* Eine Quelle für die Geometrie: Bildbreite, daraus die Bildhöhe.
+     Seitenverhältnis von boot-walrus.png ist 819/1200 = 0.6825.
+     Das min() deckelt die Bildhöhe bei 40vh — sonst wäre das Bild in breiten
+     Fenstern höher als der Viewport und der Himmel verschwände. */
+  --wal-w:min(clamp(100vw, 55vh, 113vw), 58.6vh);
+  --wal-h:calc(var(--wal-w) * 0.6825)}
+.boot .walrus{position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+  width:var(--wal-w); height:auto; display:block}
+/* Der Himmel endet exakt an der Oberkante des Bildes (1px Überlappung gegen
+   Rundungsspalten), damit der Verlauf nahtlos ins Bild läuft. */
+.boot .sky{position:absolute; top:0; left:0; right:0;
+  bottom:calc(var(--wal-h) - 1px);
+  display:flex; align-items:center; justify-content:center;
   background:linear-gradient(180deg,#BBE2FC 0%,#F0F7FC 100%)}
-.boot .walrus{flex:none; align-self:center; display:block;
-  width:clamp(100%, 55vh, 113%); height:auto}
 
 /* Wortmarke: Outfit Light, weit gesperrt — ruhiger und moderner als ein
    fetter Schnitt. Startet erst, wenn der Webfont geladen ist, sonst
@@ -414,9 +422,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <div id="field"><i></i><i></i><i></i></div>
 
 <div class="boot" id="boot">
-  <div class="sky"></div>
-  <img class="walrus" src="/icons/boot-walrus.png" alt="FITTEN.me" width="1200" height="819">
-  <span class="word"><i>FITTEN</i><u>.me</u></span>
+  <img class="walrus" src="/icons/boot-walrus.png" alt="" width="1200" height="819">
+  <div class="sky"><span class="word"><i>FITTEN</i><u>.me</u></span></div>
 </div>
 
 <div id="app">
