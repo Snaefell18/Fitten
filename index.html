@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#BBE2FC">
+<meta name="theme-color" content="#EDF3FF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>FITTEN.ME — Kalorien & Training</title>
@@ -390,11 +390,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .toast.on{opacity:1; transform:translate(-50%,0)}
 
 /* Boot-Screen — baut den iOS-Startbildschirm exakt nach, damit der Übergang
-   nahtlos ist, und blendet nur die Wortmarke animiert ein. */
-.boot{position:fixed; inset:0; z-index:99; overflow:hidden;
+   nahtlos ist, und blendet nur die Wortmarke animiert ein.
+   Wichtig: der Himmel ist ein eigenes Flex-Element. Nur so endet der Verlauf
+   exakt an der Oberkante des Walrosses — über die volle Höhe gezogen bliebe
+   er dort noch blau und es entstünde eine harte Kante. */
+.boot{position:fixed; inset:0; z-index:99; overflow:hidden; background:#F0F7FC;
+  display:flex; flex-direction:column}
+.boot .sky{flex:1 1 auto; min-height:0;
   background:linear-gradient(180deg,#BBE2FC 0%,#F0F7FC 100%)}
-.boot .walrus{position:absolute; bottom:0; left:50%; transform:translateX(-50%);
-  width:clamp(100%, 55vh, 113%); height:auto; display:block}
+.boot .walrus{flex:none; align-self:center; display:block;
+  width:clamp(100%, 55vh, 113%); height:auto}
 .boot .word{position:absolute; top:10.5%; left:0; right:0; text-align:center;
   font-size:clamp(30px, 11.2vw, 58px); font-weight:500; color:#fff;
   letter-spacing:.05em; line-height:1;
@@ -405,7 +410,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 @keyframes word-in{
   from{opacity:0; transform:translateY(18px) scale(.96); filter:blur(6px)}
   to  {opacity:1; transform:none; filter:blur(0)}}
-.boot.off{opacity:0; pointer-events:none; transition:opacity .5s ease}
+.boot.off{opacity:0; pointer-events:none; transition:opacity .65s cubic-bezier(.4,0,.2,1)}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important; transition-duration:.001ms !important}
@@ -418,8 +423,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <div id="field"><i></i><i></i><i></i></div>
 
 <div class="boot" id="boot">
-  <span class="word">FITTEN.me</span>
+  <div class="sky"></div>
   <img class="walrus" src="/icons/boot-walrus.png" alt="FITTEN.me" width="1200" height="819">
+  <span class="word">FITTEN.me</span>
 </div>
 
 <div id="app">
