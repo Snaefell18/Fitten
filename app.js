@@ -159,11 +159,28 @@ const S = { uid:null, profile:null, day:null, dayKey:null, obStep:0, draft:{} };
 
 /* Der Boot-Screen bleibt mindestens so lange stehen, dass die Wortmarke
    ihre Einblendung zu Ende spielen kann — sonst blitzt er nur kurz auf. */
-const BOOT_MIN_MS = 1250;
+const BOOT_MIN_MS = 1600;
 const bootStart = Date.now();
+
+/* Statusleiste: während des Boot-Screens im Himmelblau, danach im hellen
+   Ton der App. Ohne das läge über dem Splash ein andersfarbiger Streifen. */
+function themeColor(hex){
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", hex);
+}
+themeColor("#BBE2FC");
+
+/* Die Wortmarke startet erst, wenn der Webfont da ist — sonst wird sie
+   erst im Fallback gezeichnet und springt beim Nachladen um. */
+(document.fonts ? document.fonts.ready : Promise.resolve())
+  .then(() => document.getElementById("boot").classList.add("ready"));
+setTimeout(() => document.getElementById("boot").classList.add("ready"), 700);
+
 function hideBoot(){
-  setTimeout(() => $("#boot").classList.add("off"),
-             Math.max(0, BOOT_MIN_MS - (Date.now() - bootStart)));
+  setTimeout(() => {
+    document.getElementById("boot").classList.add("off");
+    themeColor("#EDF3FF");
+  }, Math.max(0, BOOT_MIN_MS - (Date.now() - bootStart)));
 }
 
 const $  = (s, r = document) => r.querySelector(s);
