@@ -128,7 +128,8 @@ const GOALS = [
   { id:"bulk",  n:"Muskelaufbau",               s:"Leichter Überschuss für sauberen Aufbau", f:+0.10 },
   { id:"keep",  n:"Erhaltung",                  s:"Gewicht halten, Leistung stabilisieren",  f: 0.00 },
   { id:"cut1",  n:"Moderate Gewichtsabnahme",   s:"Rund 0,4 kg pro Woche, gut durchhaltbar", f:-0.15 },
-  { id:"cut2",  n:"Fortgeschrittene Abnahme",   s:"Rund 0,7 kg pro Woche, mehr Disziplin",   f:-0.22 }
+  { id:"cut2",  n:"Fortgeschrittene Abnahme",   s:"Rund 0,7 kg pro Woche, mehr Disziplin",   f:-0.22 },
+  { id:"manual",n:"Manuell",                    s:"Eigenes Defizit oder Überschuss",         f:null }
 ];
 
 /* d-Feld je Lebensmittel: die strengste Ernährungsform, in die es passt.
@@ -143,7 +144,8 @@ const DIETS = [
 const LIFESTYLE = [
   { id:"low",  n:"Überwiegend sitzend", s:"Büro, wenig Wege",              f:1.20 },
   { id:"mid",  n:"Leicht aktiv",        s:"Etwas Bewegung im Alltag",      f:1.30 },
-  { id:"high", n:"Aktiv",               s:"Viel auf den Beinen, Handwerk", f:1.45 }
+  { id:"high", n:"Aktiv",               s:"Viel auf den Beinen, Handwerk", f:1.45 },
+  { id:"manual",n:"Manuell",            s:"Eigener Zuschlag in Kalorien",  f:null }
 ];
 
 /* ─────────────────  3. FIREBASE  ───────────────── */
@@ -226,14 +228,22 @@ function bmrOf(p){
   return Math.round(p.sex === "m" ? base + 5 : base - 161);
 }
 // Grundbedarf inkl. Alltag, OHNE gezieltes Training (das wird separat gutgeschrieben)
+const DEF_LS_KCAL = 400;    // typischer Alltagszuschlag, wenn nichts gesetzt ist
+const DEF_GOAL_KCAL = -500; // klassisches Defizit von rund 0,5 kg pro Woche
+
 function tdeeOf(p){
+  if (p.lifestyle === "manual")
+    return Math.round(bmrOf(p) + (p.lifestyleKcal ?? DEF_LS_KCAL));
   const l = LIFESTYLE.find(x => x.id === p.lifestyle) || LIFESTYLE[1];
   return Math.round(bmrOf(p) * l.f);
 }
 function targetOf(p){
+  const tdee = tdeeOf(p);
   const g = GOALS.find(x => x.id === p.goal) || GOALS[1];
-  const raw = tdeeOf(p) * (1 + g.f);
-  // Untergrenze: nie unter den Grundumsatz. Verhindert unrealistische Zielwerte.
+  const raw = p.goal === "manual"
+    ? tdee + (p.goalKcal ?? DEF_GOAL_KCAL)
+    : tdee * (1 + g.f);
+  // Untergrenze: nie unter den Grundumsatz. Gilt auch für eigene Werte.
   return Math.round(Math.max(raw, bmrOf(p)));
 }
 const kcalPerHour = (met, kg) => Math.round(met * 1.05 * kg);
@@ -440,12 +450,17 @@ const OB = [
         <div class="tiles">
           ${LIFESTYLE.map(l => tileHTML(l.id, l.n, l.s, "", d.lifestyle===l.id)).join("")}
         </div>
+        <div class="field" id="ob-lsk" style="margin-top:12px" ${d.lifestyle==="manual"?"":"hidden"}>
+          <label for="f-lsk">Zuschlag zum Grundumsatz (kcal)</label>
+          <input id="f-lsk" type="number" inputmode="numeric" value="${d.lifestyleKcal ?? DEF_LS_KCAL}">
+        </div>
         <p class="hint">Trainingseinheiten trägst du später separat ein – sie erhöhen dein Tagesbudget zusätzlich.</p>`;
     },
     bind(){
       $$("#ob-body .tile").forEach(t => t.onclick = () => {
         S.draft.lifestyle = t.dataset.id;
         $$("#ob-body .tile").forEach(x => x.classList.toggle("sel", x === t));
+        $("#ob-lsk").hidden = S.draft.lifestyle !== "manual";
       });
     },
     read(){
@@ -454,6 +469,11 @@ const OB = [
       if (!(h >= 120 && h <= 230)) return "Bitte eine Größe zwischen 120 und 230 cm eintragen.";
       if (!(a >= 14 && a <= 100))  return "Bitte ein Alter zwischen 14 und 100 Jahren eintragen.";
       Object.assign(S.draft, { weight:w, height:h, age:a, sex:$("#f-s").value });
+      if (S.draft.lifestyle === "manual"){
+        const k = +$("#f-lsk").value;
+        if (!(k >= 0 && k <= 3000)) return "Bitte einen Zuschlag zwischen 0 und 3000 kcal eintragen.";
+        S.draft.lifestyleKcal = Math.round(k);
+      }
       return null;
     }
   },
@@ -462,19 +482,41 @@ const OB = [
     sub:"Bestimmt, wie dein Tagesbudget vom Grundbedarf abweicht.",
     render(){
       const p = { ...S.draft }, tdee = tdeeOf(p);
+      const gk = S.draft.goalKcal ?? DEF_GOAL_KCAL;
       return `<div class="tiles">${GOALS.map(g => {
-        const t = Math.max(Math.round(tdee*(1+g.f)), bmrOf(p));
-        return tileHTML(g.id, g.n, g.s, `${num(t)} kcal`, S.draft.goal===g.id);
+        const raw = g.id === "manual" ? tdee + gk : tdee*(1+g.f);
+        return tileHTML(g.id, g.n, g.s, `${num(Math.max(Math.round(raw), bmrOf(p)))} kcal`, S.draft.goal===g.id);
       }).join("")}</div>
+      <div class="field" id="ob-gk" style="margin-top:12px" ${S.draft.goal==="manual"?"":"hidden"}>
+        <label for="f-gk">Abweichung vom Grundbedarf (kcal)</label>
+        <input id="f-gk" type="number" inputmode="numeric" value="${gk}">
+        <p class="hint">Negativ ergibt ein Defizit, positiv einen Überschuss.</p>
+      </div>
       <p class="hint">Grundbedarf inkl. Alltag: <b>${num(tdee)} kcal</b> · Grundumsatz in Ruhe: <b>${num(bmrOf(p))} kcal</b></p>`;
     },
     bind(){
       $$("#ob-body .tile").forEach(t => t.onclick = () => {
         S.draft.goal = t.dataset.id;
         $$("#ob-body .tile").forEach(x => x.classList.toggle("sel", x === t));
+        $("#ob-gk").hidden = S.draft.goal !== "manual";
       });
+      $("#f-gk").oninput = () => {
+        S.draft.goalKcal = Math.round(+$("#f-gk").value || 0);
+        const tile = $$("#ob-body .tile").find(t => t.dataset.id === "manual");
+        // direkt rechnen, damit der Wert auch stimmt, bevor "Manuell" gewählt ist
+        if (tile) tile.querySelector(".t-val").textContent =
+          `${num(Math.max(tdeeOf(S.draft) + S.draft.goalKcal, bmrOf(S.draft)))} kcal`;
+      };
     },
-    read(){ return S.draft.goal ? null : "Bitte ein Ziel auswählen."; }
+    read(){
+      if (!S.draft.goal) return "Bitte ein Ziel auswählen.";
+      if (S.draft.goal === "manual"){
+        const k = Math.round(+$("#f-gk").value || 0);
+        if (!(k >= -1500 && k <= 1500)) return "Bitte einen Wert zwischen -1500 und +1500 kcal eintragen.";
+        S.draft.goalKcal = k;
+      }
+      return null;
+    }
   },
   {
     title:"Was bewegst du gern?",
@@ -1087,12 +1129,21 @@ function openSettings(){
       <div class="tiles" data-set="lifestyle">
         ${LIFESTYLE.map(l => tileHTML(l.id, l.n, l.s, "", p.lifestyle===l.id)).join("")}
       </div>
+      <div class="field" id="st-lsk" style="margin-top:12px" ${p.lifestyle==="manual"?"":"hidden"}>
+        <label for="st-lskv">Zuschlag zum Grundumsatz (kcal)</label>
+        <input id="st-lskv" type="number" inputmode="numeric" value="${p.lifestyleKcal ?? DEF_LS_KCAL}">
+      </div>
     </div>
 
     <div class="settings-grp">
       <p class="eyebrow">Ziel</p>
       <div class="tiles" data-set="goal">
         ${GOALS.map(g => tileHTML(g.id, g.n, g.s, "", p.goal===g.id)).join("")}
+      </div>
+      <div class="field" id="st-gk" style="margin-top:12px" ${p.goal==="manual"?"":"hidden"}>
+        <label for="st-gkv">Abweichung vom Grundbedarf (kcal)</label>
+        <input id="st-gkv" type="number" inputmode="numeric" value="${p.goalKcal ?? DEF_GOAL_KCAL}">
+        <p class="hint">Negativ ergibt ein Defizit, positiv einen Überschuss.</p>
       </div>
       <p class="hint" id="st-preview"></p>
     </div>
@@ -1140,11 +1191,15 @@ function openSettings(){
     draft.height = +$("#st-h").value || draft.height;
     draft.age    = +$("#st-a").value || draft.age;
     draft.sex    = $("#st-s").value;
+    draft.lifestyleKcal = Math.round(+$("#st-lskv").value || 0);
+    draft.goalKcal      = Math.round(+$("#st-gkv").value  || 0);
+    $("#st-lsk").hidden = draft.lifestyle !== "manual";
+    $("#st-gk").hidden  = draft.goal      !== "manual";
     $("#st-preview").innerHTML =
       `Neues Tagesbudget: <b>${num(targetOf(draft))} kcal</b> · Grundbedarf ${num(tdeeOf(draft))} kcal`;
     if (draft.macroMode !== "custom" && $("#st-macros")) paintMacros();
   };
-  ["#st-w","#st-h","#st-a","#st-s"].forEach(s => $(s).oninput = preview);
+  ["#st-w","#st-h","#st-a","#st-s","#st-lskv","#st-gkv"].forEach(s => $(s).oninput = preview);
   preview();
 
   $$("#sheet-body .tiles").forEach(box => {
@@ -1214,6 +1269,10 @@ function openSettings(){
     if (!(draft.weight >= 30 && draft.weight <= 300)) { toast("Gewicht zwischen 30 und 300 kg eintragen."); return; }
     if (!(draft.height >= 120 && draft.height <= 230)) { toast("Größe zwischen 120 und 230 cm eintragen."); return; }
     if (!(draft.age >= 14 && draft.age <= 100)) { toast("Alter zwischen 14 und 100 Jahren eintragen."); return; }
+    if (draft.lifestyle === "manual" && !(draft.lifestyleKcal >= 0 && draft.lifestyleKcal <= 3000)) {
+      toast("Zuschlag zwischen 0 und 3000 kcal eintragen."); return; }
+    if (draft.goal === "manual" && !(draft.goalKcal >= -1500 && draft.goalKcal <= 1500)) {
+      toast("Abweichung zwischen -1500 und +1500 kcal eintragen."); return; }
     S.profile = { ...S.profile, ...draft };
     try { await saveProfile(); } catch { toast("Speichern fehlgeschlagen."); return; }
     // Momentaufnahme des heutigen Tages nachziehen, falls schon etwas erfasst ist
