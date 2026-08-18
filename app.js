@@ -5,14 +5,15 @@
 
 /* ─────────────────  1. KONFIGURATION  ───────────────── */
 
-const FIREBASE_CONFIG = {
-  apiKey:            "DEIN_API_KEY",
-  authDomain:        "DEIN_PROJEKT.firebaseapp.com",
-  projectId:         "DEIN_PROJEKT",
-  storageBucket:     "DEIN_PROJEKT.firebasestorage.app",
-  messagingSenderId: "000000000000",
-  appId:             "1:000000000000:web:xxxxxxxxxxxx"
+const firebaseConfig = {
+  apiKey: "AIzaSyC-06XiwTmKQeV2RRF_lPeMqmjHNfeFSC4",
+  authDomain: "fitten-me.firebaseapp.com",
+  projectId: "fitten-me",
+  storageBucket: "fitten-me.firebasestorage.app",
+  messagingSenderId: "419221842511",
+  appId: "1:419221842511:web:859e758a5b80b13ffdd83a"
 };
+
 
 // Serverless-Proxy für die Claude-API (siehe api/analyze.js).
 // Der API-Key gehört NIE ins Frontend.
