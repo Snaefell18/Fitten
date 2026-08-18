@@ -9,9 +9,13 @@
 
 const MODEL = "claude-haiku-4-5-20251001";
 
-const SYSTEM = `Du schätzt Kalorien aus Essensfotos für eine Fitness-App.
+const SYSTEM = `Du schätzt Kalorien für eine Fitness-App — entweder aus einem
+Essensfoto, aus einer Textbeschreibung oder aus beidem.
 
-Vorgehen:
+Bekommst du nur Text, gehst du von haushaltsüblichen Portionen aus, sofern der
+Nutzer keine Mengen nennt, und hältst das in "note" fest.
+
+Vorgehen bei einem Foto:
 1. Benenne jede erkennbare Komponente einzeln (Beilagen, Soßen, Öl, Getränk nicht vergessen).
 2. Schätze die Menge in Gramm oder Stück anhand von Tellergröße, Besteck und Bildwinkel.
 3. Rechne die Kalorien pro Komponente aus.
@@ -78,13 +82,25 @@ export default async function handler(req, res) {
   }
 
   const { image, mime = "image/jpeg", note = "" } = body;
-  if (!image) {
-    return res.status(400).json({ error: "no_image", message: "Kein Bild übermittelt." });
+  const text = String(note || "").trim();
+
+  if (!image && !text) {
+    return res.status(400).json({
+      error: "no_input",
+      message: "Weder Bild noch Beschreibung übermittelt."
+    });
   }
 
-  const prompt = String(note).trim()
-    ? `Analysiere diese Mahlzeit. Zusatz-Info vom Nutzer: "${String(note).trim()}"`
-    : "Analysiere diese Mahlzeit.";
+  const prompt = image
+    ? (text ? `Analysiere diese Mahlzeit. Zusatz-Info vom Nutzer: "${text}"`
+            : "Analysiere diese Mahlzeit.")
+    : `Der Nutzer beschreibt seine Mahlzeit so: "${text}". Schätze die Kalorien.`;
+
+  // Ohne Bild wird nur der Text geschickt — das spart Tokens und läuft schneller
+  const content = image
+    ? [{ type: "image", source: { type: "base64", media_type: mime, data: image } },
+       { type: "text",  text: prompt }]
+    : [{ type: "text", text: prompt }];
 
   /* ── Anthropic aufrufen ─────────────────────────────────────── */
   let raw;
@@ -104,13 +120,7 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 700,
         system: SYSTEM,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mime, data: image } },
-            { type: "text",  text: prompt }
-          ]
-        }]
+        messages: [{ role: "user", content }]
       })
     });
     clearTimeout(timer);
@@ -128,7 +138,7 @@ export default async function handler(req, res) {
     return res.status(504).json({
       error: "upstream_failed",
       message: e.name === "AbortError"
-        ? "Zeitüberschreitung bei der Bildanalyse."
+        ? "Zeitüberschreitung bei der Analyse."
         : String(e.message || e)
     });
   }
