@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#EDF3FF">
+<meta name="theme-color" content="#BBE2FC">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>FITTEN.ME — Kalorien & Training</title>
@@ -49,15 +49,17 @@
 html,body{height:100%}
 body{
   margin:0; font-family:var(--font); color:var(--ink);
-  background:#EDF3FF;
+  background:#F4F8FF;
   -webkit-font-smoothing:antialiased;
   overscroll-behavior-y:none;
 }
 
 /* ambient blue field — the "glass" needs something to refract */
+/* Startet oben mit derselben Farbe wie der Splash-Himmel, damit der Verlauf
+   ohne Bruch bis unter die Statusleiste durchläuft. */
 #field{position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none;
-  background:linear-gradient(170deg,#E6EEFF 0%,#F4F8FF 45%,#EAF0FF 100%)}
-#field i{position:absolute; display:block; border-radius:50%; filter:blur(60px); opacity:.75}
+  background:linear-gradient(180deg,#BBE2FC 0%,#DCEAFD 22%,#EDF3FF 52%,#F4F8FF 100%)}
+#field i{position:absolute; display:block; border-radius:50%; filter:blur(60px); opacity:.42}
 #field i:nth-child(1){width:70vw; height:70vw; left:-22vw; top:-18vw; background:radial-gradient(circle,#BBD4FF,transparent 68%); animation:drift1 26s ease-in-out infinite}
 #field i:nth-child(2){width:64vw; height:64vw; right:-24vw; top:22vh; background:radial-gradient(circle,#CFE0FF,transparent 68%); animation:drift2 32s ease-in-out infinite}
 #field i:nth-child(3){width:80vw; height:80vw; left:-10vw; bottom:-34vh; background:radial-gradient(circle,#D8E6FF,transparent 70%); animation:drift1 38s ease-in-out infinite reverse}
@@ -186,6 +188,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .chip.sel{background:var(--blue-600); border-color:var(--blue-600); color:#fff;
   box-shadow:0 6px 16px rgba(29,110,245,.32)}
 .chip.sel em{color:rgba(255,255,255,.72)}
+.chip.no{background:#FEE4E2; border-color:#FDA29B; color:#B42318; text-decoration:line-through;
+  box-shadow:none}
+.chip.no em{color:#D92D20; text-decoration:none}
 
 /* ── HOME ── */
 .top{display:flex; align-items:center; justify-content:space-between; margin-bottom:26px}
@@ -241,6 +246,23 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .stat.eat b{color:var(--blue-700)}
 .stat.move b{color:var(--good)}
 
+.macros{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:9px}
+.macro{padding:13px 12px 14px; border-radius:var(--r-md); background:var(--glass);
+  backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border:1px solid var(--glass-line); box-shadow:var(--shadow-s)}
+.macro .eyebrow{font-size:10px}
+.macro b{display:block; margin-top:5px; font-size:18px; font-weight:750; letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums}
+.macro b span{font-size:12px; font-weight:600; color:var(--ink-3); letter-spacing:0}
+.macro .mrail{height:5px; border-radius:99px; background:rgba(255,255,255,.8); margin-top:9px;
+  overflow:hidden; box-shadow:inset 0 1px 1px rgba(13,38,90,.07)}
+.macro .mrail i{display:block; height:100%; width:0; border-radius:99px;
+  transition:width .7s cubic-bezier(.2,.8,.3,1)}
+.macro.pr b{color:var(--blue-700)}   .macro.pr .mrail i{background:var(--blue-600)}
+.macro.ch b{color:#0E9F63}           .macro.ch .mrail i{background:var(--good)}
+.macro.fa b{color:#C2740A}           .macro.fa .mrail i{background:var(--warn)}
+.macro .mrail i.over{background:var(--bad)}
+
 /* log list */
 .log{margin-top:20px; padding:6px 6px 6px}
 .log-head{display:flex; justify-content:space-between; align-items:center; padding:10px 12px 8px}
@@ -265,7 +287,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   max-width:520px; margin:0 auto;
   display:flex; flex-direction:column; gap:10px;
   padding:30px 18px calc(env(safe-area-inset-bottom) + 14px);
-  background:linear-gradient(to top,#EDF3FF 0%,#EDF3FF 60%,rgba(237,243,255,.82) 80%,rgba(237,243,255,0) 100%);
+  background:linear-gradient(to top,#F4F8FF 0%,#F4F8FF 60%,rgba(244,248,255,.82) 80%,rgba(244,248,255,0) 100%);
   pointer-events:none}
 .actions>*{pointer-events:auto}
 #s-home{padding-bottom:calc(env(safe-area-inset-bottom) + 158px)}
@@ -503,7 +525,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
   <!-- ══════════ ONBOARDING ══════════ -->
   <section class="screen" id="s-ob">
-    <div class="steps" id="ob-steps"><i></i><i></i><i></i><i></i></div>
+    <div class="steps" id="ob-steps"></div>
     <div class="ob-head">
       <p class="eyebrow" id="ob-eyebrow"></p>
       <h1 id="ob-title" style="margin-top:6px"></h1>
@@ -553,6 +575,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         </div>
       </div>
 
+      <div class="macros" id="h-macros"></div>
+
       <div class="glass log" id="h-log"></div>
     </div>
 
@@ -568,7 +592,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <button class="btn btn-glass btn-sm" id="a-manual">+ Meal</button>
         <button class="btn btn-glass btn-sm" id="a-train">+ Training</button>
       </div>
-      <button class="btn btn-primary" id="a-today" hidden>Zurück zu heute</button>
     </div>
   </section>
 </div>
