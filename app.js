@@ -188,6 +188,7 @@ const ICON = {
   fork :`<svg viewBox="0 0 24 24" fill="none" stroke="#1D6EF5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v7a3 3 0 0 0 6 0V2M8 9v13M18 2c-1.5 2-2 4-2 7v4h4V9c0-3-.5-5-2-7zM18 13v9"/></svg>`,
   bolt :`<svg viewBox="0 0 24 24" fill="none" stroke="#0E9F63" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg>`,
   trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>`,
+  swap :`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 22v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L21 8M20.5 15a9 9 0 0 1-14.9 3.4L3 16"/></svg>`,
   cam  :`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`
 };
 
@@ -513,46 +514,56 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet()
 /* ─────────────────  11. FOTO → CLAUDE  ───────────────── */
 
 let photoData = null;   // { base64, mime, url }
+let photoNote = "";     // bleibt beim Wechseln des Fotos erhalten
 
-$("#a-photo").onclick = () => { photoData = null; openPhotoSheet(); };
+$("#a-photo").onclick = () => { photoData = null; photoNote = ""; openPhotoSheet(); };
 
 function openPhotoSheet(){
   openSheet("Meal erfassen", `
-    <div id="ph-slot">
+    <button type="button" class="shot ${photoData?"has":""}" id="ph-slot">
       ${photoData
-        ? `<img class="preview" src="${photoData.url}" alt="Aufgenommene Mahlzeit">`
-        : `<div class="drop">${ICON.cam}<span>Noch kein Foto ausgewählt</span></div>`}
-    </div>
-    <div class="row" style="margin-top:12px">
-      <button class="btn btn-glass btn-sm" id="ph-cam">Kamera</button>
-      <button class="btn btn-glass btn-sm" id="ph-lib">Galerie</button>
-    </div>
+        ? `<img class="preview" src="${photoData.url}" alt="Aufgenommene Mahlzeit">
+           <span class="swap">${ICON.swap} Ändern</span>`
+        : `<span class="drop">${ICON.cam}
+             <b>Foto aufnehmen oder hochladen</b>
+             <small>Tippen zum Auswählen — oder einfach unten beschreiben, was du gegessen hast.</small>
+           </span>`}
+    </button>
+
     <div class="field" style="margin-top:16px">
-      <label for="ph-note">Zusatz-Info (optional)</label>
-      <textarea id="ph-note" rows="3" placeholder="z. B. nur die halbe Portion, dazu noch ein Ei, mit Olivenöl gebraten"></textarea>
+      <label for="ph-note">${photoData ? "Zusatz-Info (optional)" : "Beschreibung"}</label>
+      <textarea id="ph-note" rows="3" placeholder="${photoData
+        ? "z. B. nur die halbe Portion, dazu noch ein Ei"
+        : "z. B. zwei Scheiben Vollkornbrot mit Käse, dazu ein Apfel"}">${esc(photoNote)}</textarea>
     </div>
     <div id="ph-out"></div>
-  `, `<button class="btn btn-primary" id="ph-go" ${photoData?"":"disabled"}>Analysieren</button>`);
+  `, `<button class="btn btn-primary" id="ph-go">Analysieren</button>`);
 
-  $("#ph-cam").onclick = () => $("#file-cam").click();
-  $("#ph-lib").onclick = () => $("#file-lib").click();
-  $("#ph-go").onclick  = analyzePhoto;
+  // Rahmen selbst öffnet den nativen Auswahldialog (Kamera oder Mediathek)
+  $("#ph-slot").onclick = () => $("#file-pick").click();
+
+  const note = $("#ph-note");
+  const sync = () => {
+    photoNote = note.value;
+    // Analyse braucht entweder ein Bild oder eine Beschreibung
+    $("#ph-go").disabled = !photoData && !note.value.trim();
+  };
+  note.oninput = sync;
+  sync();
+
+  $("#ph-go").onclick = analyzeMeal;
 }
 
-$("#file-cam").onchange = e => pickFile(e.target);
-$("#file-lib").onchange = e => pickFile(e.target);
-
-async function pickFile(input){
-  const file = input.files?.[0];
+$("#file-pick").onchange = async e => {
+  const input = e.target, file = input.files?.[0];
   input.value = "";
   if (!file) return;
-  const note = $("#ph-note")?.value || "";
+  photoNote = $("#ph-note")?.value || photoNote;
   try {
     photoData = await compress(file);
     openPhotoSheet();
-    if (note) $("#ph-note").value = note;
   } catch { toast("Das Bild konnte nicht gelesen werden."); }
-}
+};
 
 /* Verkleinern spart Tokens und damit direkt API-Kosten. */
 function compress(file, max = 1024, quality = 0.75){
@@ -573,17 +584,22 @@ function compress(file, max = 1024, quality = 0.75){
   });
 }
 
-async function analyzePhoto(){
-  if (!photoData) return;
+async function analyzeMeal(){
   const note = $("#ph-note").value.trim();
+  if (!photoData && !note) return;
+
+  photoNote = note;
   $("#ph-go").disabled = true;
-  $("#ph-out").innerHTML = `<div class="analyzing"><span class="spin"></span>Claude schaut sich dein Essen an …</div>`;
+  $("#ph-out").innerHTML = `<div class="analyzing"><span class="spin"></span>${
+    photoData ? "Claude schaut sich dein Essen an …" : "Claude rechnet deine Beschreibung durch …"}</div>`;
 
   try {
     const r = await fetch(ANALYZE_ENDPOINT, {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ image: photoData.base64, mime: photoData.mime, note })
+      body: JSON.stringify(photoData
+        ? { image: photoData.base64, mime: photoData.mime, note }
+        : { note })
     });
 
     const ct = r.headers.get("content-type") || "";
@@ -612,7 +628,9 @@ function showResult(d){
   $("#sheet-title").textContent = "Erkannt";
   $("#sheet-body").innerHTML = `
     <div class="res-top">
-      <img class="res-thumb" src="${photoData.url}" alt="">
+      ${photoData
+        ? `<img class="res-thumb" src="${photoData.url}" alt="">`
+        : `<span class="res-thumb alt">${ICON.fork}</span>`}
       <span class="tx"><b>${esc(d.title || "Mahlzeit")}</b>
         <span>${esc([conf, d.note].filter(Boolean).join(" · "))}</span></span>
     </div>
@@ -631,7 +649,7 @@ function showResult(d){
 
   $("#sheet-foot").innerHTML = `
     <button class="btn btn-primary" id="ph-save">Eintragen</button>
-    <button class="btn btn-ghost" id="ph-retry">Neues Foto</button>`;
+    <button class="btn btn-ghost" id="ph-retry">Nochmal anpassen</button>`;
 
   $("#sheet-body").scrollTop = 0;
 
@@ -639,13 +657,13 @@ function showResult(d){
     const kcal = Math.max(0, +$("#ph-fix").value || 0);
     await addEntry("meals", {
       name: d.title || "Mahlzeit",
-      detail: items.map(i => i.name).slice(0,3).join(", ") || "per Foto erfasst",
+      detail: items.map(i => i.name).slice(0,3).join(", ") || (photoData ? "per Foto erfasst" : "per Beschreibung"),
       kcal, src:"photo"
     });
     closeSheet();
     toast(`${num(kcal)} kcal eingetragen`);
   };
-  $("#ph-retry").onclick = () => { photoData = null; openPhotoSheet(); };
+  $("#ph-retry").onclick = () => openPhotoSheet();
 }
 
 /* ─────────────────  12. MANUELLE MAHLZEIT  ───────────────── */
