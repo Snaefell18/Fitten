@@ -331,6 +331,41 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .settings-grp>.eyebrow{margin:0 4px 10px}
 .hint{font-size:12.5px; color:var(--ink-3); line-height:1.45; margin:8px 4px 0}
 
+/* ── Installations-Hinweis ── */
+.install{display:none; align-items:center; gap:12px; margin-bottom:16px; padding:13px 14px;
+  border-radius:var(--r-md); background:var(--glass-strong);
+  backdrop-filter:blur(24px) saturate(180%); -webkit-backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid var(--glass-line); box-shadow:var(--shadow-m);
+  animation:in .45s cubic-bezier(.2,.8,.3,1)}
+.install.on{display:flex}
+.install img{width:40px; height:40px; border-radius:11px; flex:none}
+.install .tx{flex:1; min-width:0}
+.install .tx b{display:block; font-size:14.5px; font-weight:680; letter-spacing:-.01em}
+.install .tx span{display:block; font-size:12.5px; color:var(--ink-2); line-height:1.35; margin-top:2px}
+.install .go{flex:none; padding:9px 15px; border-radius:99px; font-size:14px; font-weight:650;
+  background:var(--blue-600); color:#fff; box-shadow:0 6px 14px rgba(29,110,245,.28)}
+.install .x{flex:none; width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+  color:var(--ink-3); opacity:.6}
+.install .x svg{width:13px; height:13px}
+
+/* ── Kompaktes Analyse-Ergebnis ── */
+.res-top{display:flex; align-items:center; gap:13px; margin-bottom:16px}
+.res-thumb{width:54px; height:54px; border-radius:14px; object-fit:cover; flex:none;
+  box-shadow:var(--shadow-s)}
+.res-top .tx{flex:1; min-width:0}
+.res-top .tx b{display:block; font-size:17px; font-weight:700; letter-spacing:-.02em}
+.res-top .tx span{display:block; font-size:12.5px; color:var(--ink-3); margin-top:2px}
+.res-edit{display:flex; align-items:center; gap:10px; padding:14px 20px; border-radius:var(--r-md);
+  background:linear-gradient(180deg,var(--blue-500),var(--blue-600));
+  box-shadow:0 12px 26px rgba(20,80,200,.28)}
+.res-edit input{flex:1; min-width:0; padding:0; border:0; background:none; color:#fff;
+  font-size:38px; font-weight:800; letter-spacing:-.04em; font-variant-numeric:tabular-nums;
+  text-align:right}
+.res-edit input:focus{box-shadow:none}
+.res-edit label{font-size:12px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+  color:rgba(255,255,255,.75)}
+.res-edit .u{font-size:17px; font-weight:650; color:rgba(255,255,255,.8)}
+
 .toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 26px); transform:translate(-50%,20px);
   z-index:90; padding:13px 22px; border-radius:99px; background:rgba(16,24,40,.94); color:#fff;
   font-size:14.5px; font-weight:620; box-shadow:var(--shadow-l); opacity:0; pointer-events:none;
@@ -361,6 +396,15 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div>
 
 <div id="app">
+
+  <div class="install" id="install">
+    <img src="/icons/apple-touch-icon.png" alt="">
+    <span class="tx"><b id="install-t"></b><span id="install-s"></span></span>
+    <button class="go" id="install-go" hidden>Installieren</button>
+    <button class="x" id="install-x" aria-label="Hinweis ausblenden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
 
   <!-- ══════════ LOGIN ══════════ -->
   <section class="screen" id="s-login">
@@ -458,11 +502,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
           <circle cx="12" cy="13" r="4"/>
         </svg>
-        Mahlzeit fotografieren
+        Meal erfassen
       </button>
       <div class="row">
-        <button class="btn btn-glass btn-sm" id="a-manual">Manuell</button>
-        <button class="btn btn-glass btn-sm" id="a-train">Training</button>
+        <button class="btn btn-glass btn-sm" id="a-manual">+ Meal</button>
+        <button class="btn btn-glass btn-sm" id="a-train">+ Training</button>
       </div>
     </div>
   </section>
