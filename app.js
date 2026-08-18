@@ -1,18 +1,17 @@
 /* ══════════════════════════════════════════════════════════════════
-   PULSE — Kalorien & Training
+   FITTEN.ME — Kalorien & Training
    index.html + app.js  ·  Firebase Auth/Firestore  ·  Claude Vision
    ══════════════════════════════════════════════════════════════════ */
 
 /* ─────────────────  1. KONFIGURATION  ───────────────── */
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyC-06XiwTmKQeV2RRF_lPeMqmjHNfeFSC4",
-  authDomain: "fitten-me.firebaseapp.com",
-  projectId: "fitten-me",
-  storageBucket: "fitten-me.firebasestorage.app",
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyC-06XiwTmKQeV2RRF_lPeMqmjHNfeFSC4",
+  authDomain:        "fitten-me.firebaseapp.com",
+  projectId:         "fitten-me",
+  storageBucket:     "fitten-me.firebasestorage.app",
   messagingSenderId: "419221842511",
-  appId: "1:419221842511:web:859e758a5b80b13ffdd83a"
+  appId:             "1:419221842511:web:859e758a5b80b13ffdd83a"
 };
 
 // Serverless-Proxy für die Claude-API (siehe api/analyze.js).
@@ -140,10 +139,7 @@ const LIFESTYLE = [
 
 /* ─────────────────  3. FIREBASE  ───────────────── */
 
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut
@@ -152,10 +148,9 @@ import {
   getFirestore, doc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-// Initialize Firebase
-const app   = initializeApp(firebaseConfig);
-const auth  = getAuth(app);
-const db    = getFirestore(app);
+const fb    = initializeApp(FIREBASE_CONFIG);
+const auth  = getAuth(fb);
+const db    = getFirestore(fb);
 const gprov = new GoogleAuthProvider();
 
 /* ─────────────────  4. STATE & HELFER  ───────────────── */
@@ -587,12 +582,20 @@ async function analyzePhoto(){
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ image: photoData.base64, mime: photoData.mime, note })
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
+
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("application/json")){
+      // Kommt HTML zurück, existiert /api/analyze auf dem Server nicht.
+      throw new Error(`Der Endpunkt ${ANALYZE_ENDPOINT} liefert kein JSON (HTTP ${r.status}). Liegt die Datei api/analyze.js im Projekt-Root?`);
+    }
+
     const data = await r.json();
+    if (!r.ok) throw new Error(data.message || data.error || `HTTP ${r.status}`);
     showResult(data);
-  } catch {
-    $("#ph-out").innerHTML = `<div class="analyzing" style="color:#EF4444">
-      Die Analyse hat nicht geklappt. Prüfe deine Verbindung oder trag die Mahlzeit manuell ein.</div>`;
+  } catch (e) {
+    $("#ph-out").innerHTML = `<div class="analyzing" style="color:#B42318; align-items:flex-start; line-height:1.45">
+      <span style="flex:1">Die Analyse hat nicht geklappt.<br>
+      <span style="font-weight:550; font-size:13.5px; color:var(--ink-2)">${esc(e.message || "Unbekannter Fehler")}</span></span></div>`;
     $("#ph-go").disabled = false;
   }
 }
