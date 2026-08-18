@@ -145,7 +145,7 @@ import {
   createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc
+  getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 const fb    = initializeApp(FIREBASE_CONFIG);
@@ -155,7 +155,7 @@ const gprov = new GoogleAuthProvider();
 
 /* ─────────────────  4. STATE & HELFER  ───────────────── */
 
-const S = { uid:null, profile:null, day:null, dayKey:null, obStep:0, draft:{} };
+const S = { uid:null, profile:null, day:null, dayKey:null, pinned:false, obStep:0, draft:{} };
 
 /* Der Boot-Screen bleibt mindestens so lange stehen, dass die Wortmarke
    ihre Einblendung zu Ende spielen kann — sonst blitzt er nur kurz auf. */
@@ -238,12 +238,22 @@ function targetOf(p){
 }
 const kcalPerHour = (met, kg) => Math.round(met * 1.05 * kg);
 
+/* Für vergangene Tage gilt das Ziel, das an dem Tag galt — sonst würden sich
+   alte Bilanzen rückwirkend verschieben, sobald Gewicht oder Ziel sich ändern.
+   Der heutige Tag rechnet immer mit dem aktuellen Profil. */
+function dayTarget(){
+  return viewingToday() ? targetOf(S.profile) : (S.day?.target ?? targetOf(S.profile));
+}
+function dayTdee(){
+  return viewingToday() ? tdeeOf(S.profile) : (S.day?.tdee ?? tdeeOf(S.profile));
+}
+
 function totals(){
-  const p = S.profile, d = S.day || { meals:[], workouts:[] };
+  const d = S.day || { meals:[], workouts:[] };
   const eaten  = d.meals.reduce((a,m) => a + m.kcal, 0);
   const moved  = d.workouts.reduce((a,w) => a + w.kcal, 0);
-  const target = targetOf(p);
-  return { eaten, moved, target, tdee: tdeeOf(p), budget: target + moved, left: target + moved - eaten };
+  const target = dayTarget();
+  return { eaten, moved, target, tdee: dayTdee(), budget: target + moved, left: target + moved - eaten };
 }
 
 /* ─────────────────  6. AUTH  ───────────────── */
@@ -316,12 +326,40 @@ onAuthStateChanged(auth, async user => {
 async function saveProfile(){
   await setDoc(doc(db, "users", S.uid), S.profile, { merge:true });
 }
-async function loadDay(){
-  S.dayKey = todayKey();
-  const snap = await getDoc(doc(db, "users", S.uid, "days", S.dayKey));
+async function loadDay(key = todayKey()){
+  S.dayKey = key;
+  const snap = await getDoc(doc(db, "users", S.uid, "days", key));
   S.day = snap.exists() ? { meals:[], workouts:[], ...snap.data() } : { meals:[], workouts:[] };
 }
+const viewingToday = () => S.dayKey === todayKey();
+
+/* Alle Tage mit Einträgen, neueste zuerst. Die Summen kommen aus dem
+   Dokument selbst — kein zweiter Lesevorgang pro Tag nötig. */
+async function listDays(){
+  const snap = await getDocs(collection(db, "users", S.uid, "days"));
+  const out = [];
+  snap.forEach(d => {
+    const v = d.data() || {};
+    const meals = v.meals || [], workouts = v.workouts || [];
+    if (!meals.length && !workouts.length) return;
+    out.push({
+      key:    d.id,
+      eaten:  meals.reduce((a,m) => a + m.kcal, 0),
+      moved:  workouts.reduce((a,w) => a + w.kcal, 0),
+      target: v.target ?? null,
+      n:      meals.length + workouts.length
+    });
+  });
+  if (!out.some(d => d.key === todayKey()))
+    out.push({ key: todayKey(), eaten:0, moved:0, n:0 });
+  return out.sort((a,b) => b.key.localeCompare(a.key));
+}
 async function saveDay(){
+  // Momentaufnahme des Ziels, damit der Tag später eigenständig auswertbar ist
+  if (viewingToday()){
+    S.day.target = targetOf(S.profile);
+    S.day.tdee   = tdeeOf(S.profile);
+  }
   await setDoc(doc(db, "users", S.uid, "days", S.dayKey), S.day);
 }
 async function addEntry(kind, entry){
@@ -479,11 +517,31 @@ $("#ob-back").onclick = () => { if (S.obStep){ S.obStep--; renderOb(); } };
 
 /* ─────────────────  9. HOME  ───────────────── */
 
+const CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+
+function dayLabel(key, opts = { weekday:"long", day:"numeric", month:"long" }){
+  const [y,m,d] = key.split("-").map(Number);
+  const date = new Date(y, m-1, d);
+  const diff = Math.round((new Date(todayKey()) - new Date(key)) / 86400000);
+  if (diff === 0) return "Heute";
+  if (diff === 1) return "Gestern";
+  return date.toLocaleDateString("de-DE", opts);
+}
+
 function renderHome(){
   const t = totals();
-  const d = new Date();
-  $("#h-date").textContent = d.toLocaleDateString("de-DE",
-    { weekday:"long", day:"numeric", month:"long" });
+  const today = viewingToday();
+
+  $("#h-date").innerHTML = (today
+      ? new Date().toLocaleDateString("de-DE", { weekday:"long", day:"numeric", month:"long" })
+      : dayLabel(S.dayKey)) + CHEVRON;
+  $("#h-date").classList.toggle("past", !today);
+
+  // Auf vergangenen Tagen wird nichts erfasst — sonst landet der Eintrag
+  // unbemerkt beim heutigen Datum.
+  $("#a-photo").hidden = !today;
+  $("#a-row").hidden   = !today;
+  $("#a-today").hidden = today;
 
   const over = t.left < 0;
   $("#h-left").textContent = num(Math.abs(t.left));
@@ -521,6 +579,40 @@ function renderHome(){
     }).join("") : `<p class="log-empty">Noch nichts erfasst. Fang mit einem Foto an.</p>`}`;
 
   $$("#h-log .del").forEach(b => b.onclick = () => delEntry(b.dataset.kind, b.dataset.id));
+}
+
+/* ─────────────────  9b. TAGESWECHSEL  ───────────────── */
+
+$("#h-date").onclick = () => openDays();
+$("#a-today").onclick = async () => { S.pinned = false; await loadDay(); renderHome(); };
+
+async function openDays(){
+  openSheet("Tag wählen", `<div class="quick"><div class="analyzing">
+      <span class="spin"></span>Tage werden geladen …</div></div>`);
+  let days;
+  try { days = await listDays(); }
+  catch { $("#sheet-body").innerHTML = `<p class="log-empty">Die Tage konnten nicht geladen werden.</p>`; return; }
+
+  const current = targetOf(S.profile);
+  $("#sheet-body").innerHTML = `<div class="quick">${days.map(d => {
+    const left = (d.target ?? current) + d.moved - d.eaten;
+    const sub  = d.n ? `${d.n} ${d.n === 1 ? "Eintrag" : "Einträge"} · ${num(d.eaten)} gegessen`
+                     + (d.moved ? ` · +${num(d.moved)} Bewegung` : "")
+                     : "noch nichts erfasst";
+    return `<button class="day ${d.key === S.dayKey ? "on" : ""}" data-key="${d.key}">
+      <span class="t-txt"><span class="t-ttl">${esc(dayLabel(d.key))}</span>
+        <span class="t-sub">${sub}</span></span>
+      <span class="bal ${left < 0 ? "over" : ""}">${left < 0 ? "+" : "−"}${num(Math.abs(left))}</span>
+    </button>`;
+  }).join("")}</div>
+  <p class="hint" style="text-align:center">Rechts steht das Rest-Budget des Tages.</p>`;
+
+  $$("#sheet-body .day").forEach(b => b.onclick = async () => {
+    S.pinned = b.dataset.key !== todayKey();
+    await loadDay(b.dataset.key);
+    renderHome();
+    closeSheet();
+  });
 }
 
 /* ─────────────────  10. SHEET-SYSTEM  ───────────────── */
@@ -938,6 +1030,10 @@ function openSettings(){
     if (!(draft.age >= 14 && draft.age <= 100)) { toast("Alter zwischen 14 und 100 Jahren eintragen."); return; }
     S.profile = { ...S.profile, ...draft };
     try { await saveProfile(); } catch { toast("Speichern fehlgeschlagen."); return; }
+    // Momentaufnahme des heutigen Tages nachziehen, falls schon etwas erfasst ist
+    if (viewingToday() && (S.day.meals.length || S.day.workouts.length)){
+      try { await saveDay(); } catch {}
+    }
     renderHome(); closeSheet(); toast("Einstellungen gespeichert");
   };
   $("#st-out").onclick = () => { closeSheet(); signOut(auth); };
@@ -945,7 +1041,9 @@ function openSettings(){
 
 /* Tageswechsel abfangen, wenn die App im Hintergrund lag */
 document.addEventListener("visibilitychange", async () => {
-  if (!document.hidden && S.uid && S.profile && S.dayKey !== todayKey()){
+  // Nach Mitternacht auf den neuen Tag springen — aber nur, wenn der Nutzer
+  // nicht gerade bewusst einen vergangenen Tag ansieht.
+  if (!document.hidden && S.uid && S.profile && !S.pinned && S.dayKey !== todayKey()){
     await loadDay(); renderHome();
   }
 });
