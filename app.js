@@ -262,6 +262,7 @@ $("#li-google").onclick = () => doAuth(() => signInWithPopup(auth, gprov));
 onAuthStateChanged(auth, async user => {
   if (!user){
     S.uid = null; S.profile = null;
+    $("#install").classList.remove("on");
     screen("s-login");
     $("#boot").classList.add("off");
     return;
@@ -273,6 +274,7 @@ onAuthStateChanged(auth, async user => {
     await loadDay();
     renderHome();
     screen("s-home");
+    setTimeout(maybeShowInstall, 1500);
   } else {
     S.draft = { sex:"m", lifestyle:"mid", goal:"cut1", activities:[], foods:[] };
     S.obStep = 0;
@@ -441,6 +443,7 @@ $("#ob-next").onclick = async () => {
     await loadDay();
     renderHome();
     screen("s-home");
+    setTimeout(maybeShowInstall, 1500);
   } catch {
     toast("Speichern fehlgeschlagen. Prüfe deine Verbindung.");
   } finally { $("#ob-next").disabled = false; }
@@ -514,7 +517,7 @@ let photoData = null;   // { base64, mime, url }
 $("#a-photo").onclick = () => { photoData = null; openPhotoSheet(); };
 
 function openPhotoSheet(){
-  openSheet("Mahlzeit erfassen", `
+  openSheet("Meal erfassen", `
     <div id="ph-slot">
       ${photoData
         ? `<img class="preview" src="${photoData.url}" alt="Aufgenommene Mahlzeit">`
@@ -603,24 +606,34 @@ async function analyzePhoto(){
 function showResult(d){
   const items = Array.isArray(d.items) ? d.items : [];
   const total = Math.round(d.total_kcal || items.reduce((a,i) => a + (i.kcal||0), 0));
-  const conf  = { hoch:"Klare Erkennung", mittel:"Portionsgröße geschätzt", niedrig:"Grobe Schätzung" }[d.confidence] || "";
+  const conf  = { hoch:"Klar erkannt", mittel:"Portion geschätzt", niedrig:"Grobe Schätzung" }[d.confidence] || "";
 
-  $("#ph-out").innerHTML = `
-    <div class="result">
-      <div class="res-total"><span style="font-weight:650">${esc(d.title || "Mahlzeit")}</span><b>${num(total)}</b></div>
-      ${items.length ? `<div class="glass res-items">${items.map(i =>
-        `<div class="res-item"><span style="color:var(--ink)">${esc(i.name)} <span>${esc(i.amount||"")}</span></span>
-         <b>${num(i.kcal||0)}</b></div>`).join("")}</div>` : ""}
-      ${conf || d.note ? `<p class="note">${conf}${conf && d.note ? " · " : ""}${esc(d.note||"")}</p>` : ""}
-      <div class="field" style="margin-top:16px">
-        <label for="ph-fix">Kalorien anpassen</label>
-        <input id="ph-fix" type="number" inputmode="numeric" value="${total}">
-      </div>
-    </div>`;
+  // Foto schrumpft auf Thumbnail-Größe, damit die Zahlen im Vordergrund stehen
+  $("#sheet-title").textContent = "Erkannt";
+  $("#sheet-body").innerHTML = `
+    <div class="res-top">
+      <img class="res-thumb" src="${photoData.url}" alt="">
+      <span class="tx"><b>${esc(d.title || "Mahlzeit")}</b>
+        <span>${esc([conf, d.note].filter(Boolean).join(" · "))}</span></span>
+    </div>
+
+    <div class="res-edit">
+      <label for="ph-fix">Gesamt</label>
+      <input id="ph-fix" type="number" inputmode="numeric" value="${total}" aria-label="Kalorien anpassen">
+      <span class="u">kcal</span>
+    </div>
+
+    ${items.length ? `<div class="glass res-items" style="margin-top:12px">${items.map(i =>
+      `<div class="res-item"><span style="color:var(--ink)">${esc(i.name)} <span>${esc(i.amount||"")}</span></span>
+       <b>${num(i.kcal||0)}</b></div>`).join("")}</div>` : ""}
+
+    <p class="hint" style="text-align:center; margin-top:12px">Zahl antippen, um sie zu korrigieren.</p>`;
 
   $("#sheet-foot").innerHTML = `
     <button class="btn btn-primary" id="ph-save">Eintragen</button>
-    <button class="btn btn-ghost" id="ph-retry">Anderes Foto</button>`;
+    <button class="btn btn-ghost" id="ph-retry">Neues Foto</button>`;
+
+  $("#sheet-body").scrollTop = 0;
 
   $("#ph-save").onclick = async () => {
     const kcal = Math.max(0, +$("#ph-fix").value || 0);
@@ -649,7 +662,7 @@ function openManual(){
        <span class="t-val">${Math.round(f.k*f.p/100)} kcal<br><span style="font-weight:600;color:var(--ink-3);font-size:12px">${f.p} g</span></span>
      </button>`).join("");
 
-  openSheet("Mahlzeit eintragen", `
+  openSheet("Meal eintragen", `
     <div class="seg"><button class="on" data-tab="fav">Favoriten</button>
       <button data-tab="all">Alle</button><button data-tab="free">Frei</button></div>
 
@@ -662,7 +675,7 @@ function openManual(){
 
     <div data-pane="free" hidden>
       <div class="field"><label for="mn-name">Bezeichnung</label>
-        <input id="mn-name" type="text" placeholder="z. B. Omas Lasagne"></div>
+        <input id="mn-name" type="text" placeholder="z. B. McNuggets"></div>
       <div class="field"><label for="mn-kcal">Kalorien</label>
         <input id="mn-kcal" type="number" inputmode="numeric" placeholder="650"></div>
       <button class="btn btn-primary" id="mn-free">Eintragen</button>
@@ -892,3 +905,54 @@ document.addEventListener("visibilitychange", async () => {
     await loadDay(); renderHome();
   }
 });
+
+/* ─────────────────  15. INSTALLATIONS-HINWEIS  ───────────────── */
+
+let installPrompt = null;
+const DISMISS_KEY = "fitten-install-dismissed";
+
+const isStandalone = () =>
+  window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  installPrompt = e;
+  maybeShowInstall();
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  $("#install").classList.remove("on");
+});
+
+function maybeShowInstall(){
+  const box = $("#install");
+  if (!S.uid || isStandalone() || localStorage.getItem(DISMISS_KEY)) return;
+
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  if (installPrompt){
+    $("#install-t").textContent = "FITTEN.ME installieren";
+    $("#install-s").textContent = "Als eigene App auf dem Startbildschirm.";
+    $("#install-go").hidden = false;
+  } else if (iOS){
+    $("#install-t").textContent = "Auf den Homescreen legen";
+    $("#install-s").textContent = "Teilen-Symbol antippen, dann „Zum Home-Bildschirm“.";
+    $("#install-go").hidden = true;
+  } else {
+    return;   // Browser kann nicht installieren – kein Hinweis
+  }
+  box.classList.add("on");
+}
+
+$("#install-go").onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice;
+  installPrompt = null;
+  if (outcome === "accepted") $("#install").classList.remove("on");
+};
+
+$("#install-x").onclick = () => {
+  $("#install").classList.remove("on");
+  try { localStorage.setItem(DISMISS_KEY, "1"); } catch {}
+};
