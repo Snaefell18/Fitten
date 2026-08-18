@@ -157,6 +157,15 @@ const gprov = new GoogleAuthProvider();
 
 const S = { uid:null, profile:null, day:null, dayKey:null, obStep:0, draft:{} };
 
+/* Der Boot-Screen bleibt mindestens so lange stehen, dass die Wortmarke
+   ihre Einblendung zu Ende spielen kann — sonst blitzt er nur kurz auf. */
+const BOOT_MIN_MS = 1250;
+const bootStart = Date.now();
+function hideBoot(){
+  setTimeout(() => $("#boot").classList.add("off"),
+             Math.max(0, BOOT_MIN_MS - (Date.now() - bootStart)));
+}
+
 const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const num = n => Math.round(n).toLocaleString("de-DE");
@@ -265,7 +274,7 @@ onAuthStateChanged(auth, async user => {
     S.uid = null; S.profile = null;
     $("#install").classList.remove("on");
     screen("s-login");
-    $("#boot").classList.add("off");
+    hideBoot();
     return;
   }
   S.uid = user.uid;
@@ -282,7 +291,7 @@ onAuthStateChanged(auth, async user => {
     renderOb();
     screen("s-ob");
   }
-  $("#boot").classList.add("off");
+  hideBoot();
 });
 
 /* ─────────────────  7. DATEN  ───────────────── */
