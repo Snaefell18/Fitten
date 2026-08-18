@@ -237,15 +237,23 @@ function tdeeOf(p){
   const l = LIFESTYLE.find(x => x.id === p.lifestyle) || LIFESTYLE[1];
   return Math.round(bmrOf(p) * l.f);
 }
+/* Harte Untergrenze für eigene Vorgaben. Bewusst niedriger als der
+   Grundumsatz — sonst wäre eine manuelle Eingabe wirkungslos, sobald der
+   Abzug etwas größer wird. Die Werte entsprechen den üblichen Grenzen,
+   unterhalb derer eine Ernährung kaum noch bedarfsdeckend ist. */
+const kcalFloor = p => p.sex === "w" ? 1200 : 1500;
+
 function targetOf(p){
   const tdee = tdeeOf(p);
+  if (p.goal === "manual")
+    return Math.round(Math.max(tdee + (p.goalKcal ?? DEF_GOAL_KCAL), kcalFloor(p)));
   const g = GOALS.find(x => x.id === p.goal) || GOALS[1];
-  const raw = p.goal === "manual"
-    ? tdee + (p.goalKcal ?? DEF_GOAL_KCAL)
-    : tdee * (1 + g.f);
-  // Untergrenze: nie unter den Grundumsatz. Gilt auch für eigene Werte.
-  return Math.round(Math.max(raw, bmrOf(p)));
+  // Die Vorgaben sind prozentual — hier bleibt der Grundumsatz die Grenze.
+  return Math.round(Math.max(tdee * (1 + g.f), bmrOf(p)));
 }
+// true, wenn die Untergrenze den gewünschten Wert überschreibt
+const targetFloored = p =>
+  p.goal === "manual" && (tdeeOf(p) + (p.goalKcal ?? DEF_GOAL_KCAL)) < kcalFloor(p);
 const kcalPerHour = (met, kg) => Math.round(met * 1.05 * kg);
 
 /* Makroziele. Automatik: Eiweiß nach Körpergewicht (im Defizit höher, um
@@ -484,13 +492,15 @@ const OB = [
       const p = { ...S.draft }, tdee = tdeeOf(p);
       const gk = S.draft.goalKcal ?? DEF_GOAL_KCAL;
       return `<div class="tiles">${GOALS.map(g => {
-        const raw = g.id === "manual" ? tdee + gk : tdee*(1+g.f);
-        return tileHTML(g.id, g.n, g.s, `${num(Math.max(Math.round(raw), bmrOf(p)))} kcal`, S.draft.goal===g.id);
+        const val = g.id === "manual"
+          ? Math.max(tdee + gk, kcalFloor(p))
+          : Math.max(tdee*(1+g.f), bmrOf(p));
+        return tileHTML(g.id, g.n, g.s, `${num(Math.round(val))} kcal`, S.draft.goal===g.id);
       }).join("")}</div>
       <div class="field" id="ob-gk" style="margin-top:12px" ${S.draft.goal==="manual"?"":"hidden"}>
         <label for="f-gk">Abweichung vom Grundbedarf (kcal)</label>
         <input id="f-gk" type="number" inputmode="numeric" value="${gk}">
-        <p class="hint">Negativ ergibt ein Defizit, positiv einen Überschuss.</p>
+        <p class="hint" id="ob-gk-note">Negativ ergibt ein Defizit, positiv einen Überschuss.</p>
       </div>
       <p class="hint">Grundbedarf inkl. Alltag: <b>${num(tdee)} kcal</b> · Grundumsatz in Ruhe: <b>${num(bmrOf(p))} kcal</b></p>`;
     },
@@ -504,8 +514,12 @@ const OB = [
         S.draft.goalKcal = Math.round(+$("#f-gk").value || 0);
         const tile = $$("#ob-body .tile").find(t => t.dataset.id === "manual");
         // direkt rechnen, damit der Wert auch stimmt, bevor "Manuell" gewählt ist
-        if (tile) tile.querySelector(".t-val").textContent =
-          `${num(Math.max(tdeeOf(S.draft) + S.draft.goalKcal, bmrOf(S.draft)))} kcal`;
+        const want = tdeeOf(S.draft) + S.draft.goalKcal;
+        const val  = Math.max(want, kcalFloor(S.draft));
+        if (tile) tile.querySelector(".t-val").textContent = `${num(val)} kcal`;
+        $("#ob-gk-note").innerHTML = want < kcalFloor(S.draft)
+          ? `<b style="color:var(--warn)">Untergrenze von ${num(kcalFloor(S.draft))} kcal greift.</b>`
+          : "Negativ ergibt ein Defizit, positiv einen Überschuss.";
       };
     },
     read(){
@@ -1196,7 +1210,10 @@ function openSettings(){
     $("#st-lsk").hidden = draft.lifestyle !== "manual";
     $("#st-gk").hidden  = draft.goal      !== "manual";
     $("#st-preview").innerHTML =
-      `Neues Tagesbudget: <b>${num(targetOf(draft))} kcal</b> · Grundbedarf ${num(tdeeOf(draft))} kcal`;
+      `Neues Tagesbudget: <b>${num(targetOf(draft))} kcal</b> · Grundbedarf ${num(tdeeOf(draft))} kcal`
+      + (targetFloored(draft)
+        ? `<br><b style="color:var(--warn)">Untergrenze von ${num(kcalFloor(draft))} kcal greift –
+           ein größerer Abzug wird nicht übernommen.</b>` : "");
     if (draft.macroMode !== "custom" && $("#st-macros")) paintMacros();
   };
   ["#st-w","#st-h","#st-a","#st-s","#st-lskv","#st-gkv"].forEach(s => $(s).oninput = preview);
