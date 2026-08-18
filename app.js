@@ -142,6 +142,8 @@ const LIFESTYLE = [
 
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut
@@ -274,7 +276,7 @@ onAuthStateChanged(auth, async user => {
   if (snap.exists() && snap.data().onboarded){
     S.profile = snap.data();
     await loadDay();
-    // renderHome(); // Angenommen, diese Funktion existiert weiter unten im Originalcode
+    renderHome();
     screen("s-home");
   } else {
     S.draft = { sex:"m", lifestyle:"mid", goal:"cut1", activities:[], foods:[] };
@@ -301,12 +303,12 @@ async function saveDay(){
 async function addEntry(kind, entry){
   if (S.dayKey !== todayKey()) await loadDay();
   S.day[kind].unshift({ ...entry, id: crypto.randomUUID(), t: clock() });
-  // renderHome(); // Angenommen, diese Funktion existiert weiter unten im Originalcode
+  renderHome();
   try { await saveDay(); } catch { toast("Offline gespeichert – Sync folgt."); }
 }
 async function delEntry(kind, id){
   S.day[kind] = S.day[kind].filter(e => e.id !== id);
-  // renderHome(); // Angenommen, diese Funktion existiert weiter unten im Originalcode
+  renderHome();
   try { await saveDay(); } catch {}
 }
 
@@ -435,118 +437,455 @@ function renderOb(){
 $("#ob-next").onclick = async () => {
   const err = OB[S.obStep].read();
   if (err) { toast(err); return; }
-  
-  if (S.obStep < OB.length-1){
-    S.obStep++;
-    renderOb();
-  } else {
-    S.profile = { ...S.draft, onboarded:true };
+  if (S.obStep < OB.length-1){ S.obStep++; renderOb(); return; }
+
+  $("#ob-next").disabled = true;
+  S.profile = { ...S.draft, onboarded:true, createdAt: Date.now() };
+  try {
     await saveProfile();
     await loadDay();
-    // renderHome();
+    renderHome();
     screen("s-home");
-    toast("Willkommen bei PULSE!");
-  }
+  } catch {
+    toast("Speichern fehlgeschlagen. Prüfe deine Verbindung.");
+  } finally { $("#ob-next").disabled = false; }
 };
+$("#ob-back").onclick = () => { if (S.obStep){ S.obStep--; renderOb(); } };
 
-$("#ob-back").onclick = () => {
-  if(S.obStep > 0) {
-    S.obStep--;
-    renderOb();
-  }
-};
+/* ─────────────────  9. HOME  ───────────────── */
 
-/* ─────────────────  9. SHEET / PORTION HELFER  ───────────────── */
+function renderHome(){
+  const t = totals();
+  const d = new Date();
+  $("#h-date").textContent = d.toLocaleDateString("de-DE",
+    { weekday:"long", day:"numeric", month:"long" });
 
-function openSheet(title, body, footer = "") {
-  const s = document.createElement("div");
-  s.className = "sheet-overlay";
-  s.innerHTML = `
-    <div class="sheet">
-      <div class="sheet-header">
-        <h3>${esc(title)}</h3>
-        <button class="sheet-close">&times;</button>
-      </div>
-      <div class="sheet-body" id="sheet-body">${body}</div>
-      ${footer ? `<div class="sheet-footer">${footer}</div>` : ""}
+  const over = t.left < 0;
+  $("#h-left").textContent = num(Math.abs(t.left));
+  $("#h-left").classList.toggle("over", over);
+  $("#h-left-label").textContent = over ? "kcal über dem Budget" : "kcal übrig heute";
+
+  const pct = Math.min(100, t.budget > 0 ? (t.eaten / t.budget) * 100 : 0);
+  const rail = $("#h-rail");
+  rail.style.width = pct + "%";
+  rail.classList.toggle("over", over);
+
+  $("#h-eaten").textContent  = `${num(t.eaten)} gegessen`;
+  $("#h-budget").textContent = `${num(t.budget)} Budget`;
+  $("#h-tdee").textContent   = num(t.tdee);
+  $("#h-moved").textContent  = "+" + num(t.moved);
+  $("#h-eaten2").textContent = num(t.eaten);
+
+  const entries = [
+    ...S.day.meals.map(m => ({ ...m, kind:"meals" })),
+    ...S.day.workouts.map(w => ({ ...w, kind:"workouts" }))
+  ].sort((a,b) => b.t.localeCompare(a.t));
+
+  $("#h-log").innerHTML = `
+    <div class="log-head"><span class="eyebrow">Heute erfasst</span>
+      <span class="eyebrow">${entries.length || ""}</span></div>
+    ${entries.length ? entries.map(e => {
+      const mv = e.kind === "workouts";
+      return `<div class="item">
+        <span class="ic ${mv?"mv":""}">${mv?ICON.bolt:ICON.fork}</span>
+        <span class="t-txt"><span class="t-ttl">${esc(e.name)}</span>
+          <span class="t-sub">${esc(e.detail || "")} · ${e.t}</span></span>
+        <span class="kc ${mv?"mv":""}">${mv?"+":""}${num(e.kcal)}</span>
+        <button class="del" data-kind="${e.kind}" data-id="${e.id}" aria-label="Eintrag löschen">${ICON.trash}</button>
+      </div>`;
+    }).join("") : `<p class="log-empty">Noch nichts erfasst. Fang mit einem Foto an.</p>`}`;
+
+  $$("#h-log .del").forEach(b => b.onclick = () => delEntry(b.dataset.kind, b.dataset.id));
+}
+
+/* ─────────────────  10. SHEET-SYSTEM  ───────────────── */
+
+function openSheet(title, body, foot){
+  $("#sheet-title").textContent = title;
+  $("#sheet-body").innerHTML    = body;
+  $("#sheet-foot").innerHTML    = foot || "";
+  $("#sheet-wrap").classList.add("on");
+  $("#sheet-body").scrollTop = 0;
+}
+function closeSheet(){ $("#sheet-wrap").classList.remove("on"); }
+$("#scrim").onclick = closeSheet;
+$("#sheet-close").onclick = closeSheet;
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+/* ─────────────────  11. FOTO → CLAUDE  ───────────────── */
+
+let photoData = null;   // { base64, mime, url }
+
+$("#a-photo").onclick = () => { photoData = null; openPhotoSheet(); };
+
+function openPhotoSheet(){
+  openSheet("Mahlzeit erfassen", `
+    <div id="ph-slot">
+      ${photoData
+        ? `<img class="preview" src="${photoData.url}" alt="Aufgenommene Mahlzeit">`
+        : `<div class="drop">${ICON.cam}<span>Noch kein Foto ausgewählt</span></div>`}
     </div>
-  `;
-  document.body.appendChild(s);
-  
-  // Animation delay für weiches Einblenden
-  requestAnimationFrame(() => s.classList.add("open"));
-  
-  s.querySelector(".sheet-close").onclick = closeSheet;
-  s.onclick = (e) => { if(e.target === s) closeSheet(); }
+    <div class="row" style="margin-top:12px">
+      <button class="btn btn-glass btn-sm" id="ph-cam">Kamera</button>
+      <button class="btn btn-glass btn-sm" id="ph-lib">Galerie</button>
+    </div>
+    <div class="field" style="margin-top:16px">
+      <label for="ph-note">Zusatz-Info (optional)</label>
+      <textarea id="ph-note" rows="3" placeholder="z. B. nur die halbe Portion, dazu noch ein Ei, mit Olivenöl gebraten"></textarea>
+    </div>
+    <div id="ph-out"></div>
+  `, `<button class="btn btn-primary" id="ph-go" ${photoData?"":"disabled"}>Analysieren</button>`);
+
+  $("#ph-cam").onclick = () => $("#file-cam").click();
+  $("#ph-lib").onclick = () => $("#file-lib").click();
+  $("#ph-go").onclick  = analyzePhoto;
 }
 
-function closeSheet() {
-  const s = document.querySelector(".sheet-overlay");
-  if(s) {
-    s.classList.remove("open");
-    setTimeout(() => s.remove(), 300); // Wait for transition
+$("#file-cam").onchange = e => pickFile(e.target);
+$("#file-lib").onchange = e => pickFile(e.target);
+
+async function pickFile(input){
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const note = $("#ph-note")?.value || "";
+  try {
+    photoData = await compress(file);
+    openPhotoSheet();
+    if (note) $("#ph-note").value = note;
+  } catch { toast("Das Bild konnte nicht gelesen werden."); }
+}
+
+/* Verkleinern spart Tokens und damit direkt API-Kosten. */
+function compress(file, max = 1024, quality = 0.75){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width  = Math.round(img.width  * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/jpeg", quality);
+      URL.revokeObjectURL(img.src);
+      res({ url, mime:"image/jpeg", base64:url.split(",")[1] });
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function analyzePhoto(){
+  if (!photoData) return;
+  const note = $("#ph-note").value.trim();
+  $("#ph-go").disabled = true;
+  $("#ph-out").innerHTML = `<div class="analyzing"><span class="spin"></span>Claude schaut sich dein Essen an …</div>`;
+
+  try {
+    const r = await fetch(ANALYZE_ENDPOINT, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ image: photoData.base64, mime: photoData.mime, note })
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    showResult(data);
+  } catch {
+    $("#ph-out").innerHTML = `<div class="analyzing" style="color:#EF4444">
+      Die Analyse hat nicht geklappt. Prüfe deine Verbindung oder trag die Mahlzeit manuell ein.</div>`;
+    $("#ph-go").disabled = false;
   }
 }
 
-// ── HIER IST DIE FUNKTION, DIE IN DEINEM CODE ABGESCHNITTEN WAR ──
+function showResult(d){
+  const items = Array.isArray(d.items) ? d.items : [];
+  const total = Math.round(d.total_kcal || items.reduce((a,i) => a + (i.kcal||0), 0));
+  const conf  = { hoch:"Klare Erkennung", mittel:"Portionsgröße geschätzt", niedrig:"Grobe Schätzung" }[d.confidence] || "";
+
+  $("#ph-out").innerHTML = `
+    <div class="result">
+      <div class="res-total"><span style="font-weight:650">${esc(d.title || "Mahlzeit")}</span><b>${num(total)}</b></div>
+      ${items.length ? `<div class="glass res-items">${items.map(i =>
+        `<div class="res-item"><span style="color:var(--ink)">${esc(i.name)} <span>${esc(i.amount||"")}</span></span>
+         <b>${num(i.kcal||0)}</b></div>`).join("")}</div>` : ""}
+      ${conf || d.note ? `<p class="note">${conf}${conf && d.note ? " · " : ""}${esc(d.note||"")}</p>` : ""}
+      <div class="field" style="margin-top:16px">
+        <label for="ph-fix">Kalorien anpassen</label>
+        <input id="ph-fix" type="number" inputmode="numeric" value="${total}">
+      </div>
+    </div>`;
+
+  $("#sheet-foot").innerHTML = `
+    <button class="btn btn-primary" id="ph-save">Eintragen</button>
+    <button class="btn btn-ghost" id="ph-retry">Anderes Foto</button>`;
+
+  $("#ph-save").onclick = async () => {
+    const kcal = Math.max(0, +$("#ph-fix").value || 0);
+    await addEntry("meals", {
+      name: d.title || "Mahlzeit",
+      detail: items.map(i => i.name).slice(0,3).join(", ") || "per Foto erfasst",
+      kcal, src:"photo"
+    });
+    closeSheet();
+    toast(`${num(kcal)} kcal eingetragen`);
+  };
+  $("#ph-retry").onclick = () => { photoData = null; openPhotoSheet(); };
+}
+
+/* ─────────────────  12. MANUELLE MAHLZEIT  ───────────────── */
+
+$("#a-manual").onclick = () => openManual();
+
+function openManual(){
+  const favs  = FOODS.filter(f => S.profile.foods.includes(f.id));
+  const rest  = FOODS.filter(f => !S.profile.foods.includes(f.id));
+  const list  = arr => arr.map(f =>
+    `<button class="qitem" data-id="${f.id}">
+       <span class="t-txt"><span class="t-ttl">${esc(f.n)}</span>
+         <span class="t-sub">${f.k} kcal / 100 g</span></span>
+       <span class="t-val">${Math.round(f.k*f.p/100)} kcal<br><span style="font-weight:600;color:var(--ink-3);font-size:12px">${f.p} g</span></span>
+     </button>`).join("");
+
+  openSheet("Mahlzeit eintragen", `
+    <div class="seg"><button class="on" data-tab="fav">Favoriten</button>
+      <button data-tab="all">Alle</button><button data-tab="free">Frei</button></div>
+
+    <div data-pane="fav"><div class="quick">${favs.length?list(favs):`<p class="log-empty">Keine Favoriten gewählt.</p>`}</div></div>
+
+    <div data-pane="all" hidden>
+      <div class="field search"><input id="mn-search" type="text" placeholder="Lebensmittel suchen"></div>
+      <div class="quick" id="mn-list">${list(rest)}</div>
+    </div>
+
+    <div data-pane="free" hidden>
+      <div class="field"><label for="mn-name">Bezeichnung</label>
+        <input id="mn-name" type="text" placeholder="z. B. Omas Lasagne"></div>
+      <div class="field"><label for="mn-kcal">Kalorien</label>
+        <input id="mn-kcal" type="number" inputmode="numeric" placeholder="650"></div>
+      <button class="btn btn-primary" id="mn-free">Eintragen</button>
+    </div>
+  `);
+
+  $$("#sheet-body .seg button").forEach(b => b.onclick = () => {
+    $$("#sheet-body .seg button").forEach(x => x.classList.toggle("on", x === b));
+    $$("#sheet-body [data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  });
+
+  $("#mn-search").oninput = e => {
+    const q = e.target.value.toLowerCase().trim();
+    $("#mn-list").innerHTML = list(rest.filter(f => f.n.toLowerCase().includes(q)));
+    bindFoods();
+  };
+
+  $("#mn-free").onclick = async () => {
+    const name = $("#mn-name").value.trim() || "Mahlzeit";
+    const kcal = +$("#mn-kcal").value;
+    if (!(kcal > 0)) { toast("Bitte eine Kalorienzahl eintragen."); return; }
+    await addEntry("meals", { name, detail:"manuell", kcal:Math.round(kcal), src:"manual" });
+    closeSheet(); toast(`${num(kcal)} kcal eingetragen`);
+  };
+
+  bindFoods();
+}
+
+function bindFoods(){
+  $$("#sheet-body .qitem").forEach(b => b.onclick = () => {
+    const f = FOODS.find(x => x.id === b.dataset.id);
+    openPortion(f);
+  });
+}
 
 function openPortion(f){
   openSheet(f.n, `
     <div class="field"><label for="pt-g">Menge in Gramm</label>
       <input id="pt-g" type="number" inputmode="numeric" value="${f.p}"></div>
     <div class="res-total" style="margin-top:4px">
-      <span style="font-weight:650">Ergibt</span><b id="pt-res">${Math.round((f.k * f.p) / 100)} kcal</b>
-    </div>
-  `, `<button class="btn btn-primary" id="pt-go">Eintragen</button>`);
-  
-  const inp = $("#pt-g");
-  const res = $("#pt-res");
-  
-  inp.oninput = () => {
-    const g = +inp.value || 0;
-    res.textContent = Math.round((f.k * g) / 100) + " kcal";
+      <span style="font-weight:650">${f.k} kcal / 100 g</span><b id="pt-k">${Math.round(f.k*f.p/100)}</b></div>
+  `, `<button class="btn btn-primary" id="pt-save">Eintragen</button>
+      <button class="btn btn-ghost" id="pt-back">Zurück</button>`);
+
+  const calc = () => Math.round(f.k * (+$("#pt-g").value || 0) / 100);
+  $("#pt-g").oninput = () => $("#pt-k").textContent = num(calc());
+  $("#pt-save").onclick = async () => {
+    const kcal = calc();
+    if (!kcal) { toast("Bitte eine Menge eintragen."); return; }
+    await addEntry("meals", { name:f.n, detail:`${$("#pt-g").value} g`, kcal, src:"db" });
+    closeSheet(); toast(`${num(kcal)} kcal eingetragen`);
   };
-  
-  $("#pt-go").onclick = async () => {
-    const g = +inp.value;
-    if (!(g > 0)) { toast("Bitte eine gültige Menge eingeben."); return; }
-    const kcal = Math.round((f.k * g) / 100);
-    
-    await addEntry("meals", { name: f.n, detail: g + " g", kcal, src: "manual" });
-    closeSheet();
-    toast(`${num(kcal)} kcal eingetragen`);
-  };
+  $("#pt-back").onclick = openManual;
 }
 
-/* ─────────────────  10. TRAINING HELFER (BONUS)  ───────────────── */
+/* ─────────────────  13. TRAINING  ───────────────── */
 
-function openActivity(a) {
-  const kg = S.profile?.weight || 75;
-  const kph = kcalPerHour(a.met, kg);
-  
+$("#a-train").onclick = () => openTraining();
+
+function openTraining(){
+  const kg   = S.profile.weight;
+  const favs = ACTIVITIES.filter(a => S.profile.activities.includes(a.id));
+  const rest = ACTIVITIES.filter(a => !S.profile.activities.includes(a.id));
+  const list = arr => arr.map(a =>
+    `<button class="qitem" data-id="${a.id}">
+       <span class="t-txt"><span class="t-ttl">${esc(a.n)}</span>
+         <span class="t-sub">${kcalPerHour(a.met,kg)} kcal pro Stunde</span></span>
+       <span class="t-val">${Math.round(kcalPerHour(a.met,kg)/2)} kcal<br><span style="font-weight:600;color:var(--ink-3);font-size:12px">30 min</span></span>
+     </button>`).join("");
+
+  openSheet("Training erfassen", `
+    <div class="seg"><button class="on" data-tab="fav">Favoriten</button>
+      <button data-tab="all">Alle</button><button data-tab="free">Frei</button></div>
+
+    <div data-pane="fav"><div class="quick">${favs.length?list(favs):`<p class="log-empty">Keine Favoriten gewählt.</p>`}</div></div>
+    <div data-pane="all" hidden><div class="quick">${list(rest)}</div></div>
+
+    <div data-pane="free" hidden>
+      <div class="field"><label for="tr-name">Bezeichnung</label>
+        <input id="tr-name" type="text" placeholder="z. B. Fußballtraining"></div>
+      <div class="field"><label for="tr-kcal">Verbrannte Kalorien</label>
+        <input id="tr-kcal" type="number" inputmode="numeric" placeholder="420"></div>
+      <button class="btn btn-primary" id="tr-free">Eintragen</button>
+    </div>
+  `);
+
+  $$("#sheet-body .seg button").forEach(b => b.onclick = () => {
+    $$("#sheet-body .seg button").forEach(x => x.classList.toggle("on", x === b));
+    $$("#sheet-body [data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  });
+
+  $("#tr-free").onclick = async () => {
+    const name = $("#tr-name").value.trim() || "Training";
+    const kcal = +$("#tr-kcal").value;
+    if (!(kcal > 0)) { toast("Bitte eine Kalorienzahl eintragen."); return; }
+    await addEntry("workouts", { name, detail:"manuell", kcal:Math.round(kcal) });
+    closeSheet(); toast(`+${num(kcal)} kcal gutgeschrieben`);
+  };
+
+  $$("#sheet-body .qitem").forEach(b => b.onclick = () =>
+    openDuration(ACTIVITIES.find(a => a.id === b.dataset.id)));
+}
+
+function openDuration(a){
+  const kg = S.profile.weight, perH = kcalPerHour(a.met, kg);
   openSheet(a.n, `
-    <div class="field"><label for="ac-m">Dauer in Minuten</label>
-      <input id="ac-m" type="number" inputmode="numeric" value="30"></div>
-    <div class="res-total" style="margin-top:4px">
-      <span style="font-weight:650">Verbrauch</span><b id="ac-res">${Math.round(kph * 0.5)} kcal</b>
+    <div class="field"><label for="tr-min">Dauer in Minuten</label>
+      <input id="tr-min" type="number" inputmode="numeric" value="45"></div>
+    <div class="chips" style="margin-bottom:16px">
+      ${[15,30,45,60,90].map(m => `<button class="chip" data-m="${m}">${m} min</button>`).join("")}
     </div>
-  `, `<button class="btn btn-primary" id="ac-go">Eintragen</button>`);
+    <div class="res-total"><span style="font-weight:650">${perH} kcal pro Stunde</span>
+      <b id="tr-k">${Math.round(perH*0.75)}</b></div>
+  `, `<button class="btn btn-primary" id="tr-save">Eintragen</button>
+      <button class="btn btn-ghost" id="tr-back">Zurück</button>`);
 
-  const inp = $("#ac-m");
-  const res = $("#ac-res");
-  
-  inp.oninput = () => {
-    const m = +inp.value || 0;
-    res.textContent = Math.round(kph * (m / 60)) + " kcal";
-  };
+  const calc = () => Math.round(perH * (+$("#tr-min").value || 0) / 60);
+  const sync = () => $("#tr-k").textContent = num(calc());
+  $("#tr-min").oninput = sync;
+  $$("#sheet-body .chip").forEach(c => c.onclick = () => { $("#tr-min").value = c.dataset.m; sync(); });
 
-  $("#ac-go").onclick = async () => {
-    const m = +inp.value;
-    if (!(m > 0)) { toast("Bitte gültige Dauer eingeben."); return; }
-    const kcal = Math.round(kph * (m / 60));
-    
-    await addEntry("workouts", { name: a.n, detail: m + " min", kcal, src: "manual" });
-    closeSheet();
-    toast(`${num(kcal)} kcal verbrannt`);
+  $("#tr-save").onclick = async () => {
+    const kcal = calc();
+    if (!kcal) { toast("Bitte eine Dauer eintragen."); return; }
+    await addEntry("workouts", { name:a.n, detail:`${$("#tr-min").value} min`, kcal });
+    closeSheet(); toast(`+${num(kcal)} kcal gutgeschrieben`);
   };
+  $("#tr-back").onclick = openTraining;
 }
+
+/* ─────────────────  14. EINSTELLUNGEN  ───────────────── */
+
+$("#h-settings").onclick = () => openSettings();
+
+function openSettings(){
+  const p = S.profile;
+  openSheet("Einstellungen", `
+    <div class="settings-grp">
+      <p class="eyebrow">Körperdaten</p>
+      <div class="row">
+        <div class="field"><label for="st-w">Gewicht (kg)</label>
+          <input id="st-w" type="number" inputmode="decimal" step="0.1" value="${p.weight}"></div>
+        <div class="field"><label for="st-h">Größe (cm)</label>
+          <input id="st-h" type="number" inputmode="numeric" value="${p.height}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="st-a">Alter</label>
+          <input id="st-a" type="number" inputmode="numeric" value="${p.age}"></div>
+        <div class="field"><label for="st-s">Geschlecht</label>
+          <select id="st-s"><option value="m" ${p.sex==="m"?"selected":""}>Männlich</option>
+            <option value="w" ${p.sex==="w"?"selected":""}>Weiblich</option></select></div>
+      </div>
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">Alltag</p>
+      <div class="tiles" data-set="lifestyle">
+        ${LIFESTYLE.map(l => tileHTML(l.id, l.n, l.s, "", p.lifestyle===l.id)).join("")}
+      </div>
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">Ziel</p>
+      <div class="tiles" data-set="goal">
+        ${GOALS.map(g => tileHTML(g.id, g.n, g.s, "", p.goal===g.id)).join("")}
+      </div>
+      <p class="hint" id="st-preview"></p>
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">Lieblings-Aktivitäten</p>
+      <div id="st-acts">${groupedChips(ACTIVITIES, p.activities, a => `${kcalPerHour(a.met,p.weight)} kcal/h`)}</div>
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">Lieblings-Lebensmittel</p>
+      <div id="st-foods">${groupedChips(FOODS, p.foods, f => `${f.k} kcal/100 g`)}</div>
+    </div>
+  `, `<button class="btn btn-primary" id="st-save">Speichern</button>
+      <button class="btn btn-ghost" id="st-out" style="color:var(--ink-3)">Abmelden</button>`);
+
+  const draft = { ...p, activities:[...p.activities], foods:[...p.foods] };
+
+  const preview = () => {
+    draft.weight = +$("#st-w").value || draft.weight;
+    draft.height = +$("#st-h").value || draft.height;
+    draft.age    = +$("#st-a").value || draft.age;
+    draft.sex    = $("#st-s").value;
+    $("#st-preview").innerHTML =
+      `Neues Tagesbudget: <b>${num(targetOf(draft))} kcal</b> · Grundbedarf ${num(tdeeOf(draft))} kcal`;
+  };
+  ["#st-w","#st-h","#st-a","#st-s"].forEach(s => $(s).oninput = preview);
+  preview();
+
+  $$("#sheet-body .tiles").forEach(box => {
+    const key = box.dataset.set;
+    $$(".tile", box).forEach(t => t.onclick = () => {
+      draft[key] = t.dataset.id;
+      $$(".tile", box).forEach(x => x.classList.toggle("sel", x === t));
+      preview();
+    });
+  });
+
+  const toggle = (sel, key) => $$(`${sel} .chip`).forEach(c => c.onclick = () => {
+    const i = draft[key].indexOf(c.dataset.id);
+    if (i > -1) draft[key].splice(i,1); else draft[key].push(c.dataset.id);
+    c.classList.toggle("sel", i === -1);
+  });
+  toggle("#st-acts","activities");
+  toggle("#st-foods","foods");
+
+  $("#st-save").onclick = async () => {
+    preview();
+    if (!(draft.weight >= 30 && draft.weight <= 300)) { toast("Gewicht zwischen 30 und 300 kg eintragen."); return; }
+    if (!(draft.height >= 120 && draft.height <= 230)) { toast("Größe zwischen 120 und 230 cm eintragen."); return; }
+    if (!(draft.age >= 14 && draft.age <= 100)) { toast("Alter zwischen 14 und 100 Jahren eintragen."); return; }
+    S.profile = { ...S.profile, ...draft };
+    try { await saveProfile(); } catch { toast("Speichern fehlgeschlagen."); return; }
+    renderHome(); closeSheet(); toast("Einstellungen gespeichert");
+  };
+  $("#st-out").onclick = () => { closeSheet(); signOut(auth); };
+}
+
+/* Tageswechsel abfangen, wenn die App im Hintergrund lag */
+document.addEventListener("visibilitychange", async () => {
+  if (!document.hidden && S.uid && S.profile && S.dayKey !== todayKey()){
+    await loadDay(); renderHome();
+  }
+});
