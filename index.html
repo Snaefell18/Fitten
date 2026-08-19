@@ -203,6 +203,34 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .date svg{width:11px; height:11px; opacity:.75; flex:none}
 .date.past{color:var(--blue-700); background:var(--blue-100)}
 
+/* Monatskalender im Tageswechsler */
+.cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px}
+.cal-head b{font-size:16px; font-weight:700; letter-spacing:-.01em}
+.cal-head button{width:38px; height:38px; border-radius:50%; display:grid; place-items:center;
+  background:rgba(255,255,255,.72); border:1px solid var(--glass-line); box-shadow:var(--shadow-s);
+  transition:transform .14s, opacity .15s}
+.cal-head button:active{transform:scale(.9)}
+.cal-head button:disabled{opacity:.3; pointer-events:none}
+.cal-head button svg{width:16px; height:16px}
+
+.cal-wd{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px}
+.cal-wd span{text-align:center; font-size:11px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3)}
+
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+.cal-day{position:relative; aspect-ratio:1; border-radius:13px; font-size:15px; font-weight:600;
+  color:var(--ink); background:transparent; transition:background .15s, transform .14s}
+.cal-day:active{transform:scale(.92)}
+.cal-day.pad{pointer-events:none}
+.cal-day.future{color:var(--ink-3); opacity:.35; pointer-events:none}
+.cal-day.empty{color:var(--ink-3); font-weight:500}
+.cal-day.has{background:rgba(255,255,255,.7); box-shadow:var(--shadow-s)}
+.cal-day.today{color:var(--blue-700); font-weight:800}
+.cal-day.on{background:var(--blue-600); color:#fff; box-shadow:0 6px 16px rgba(29,110,245,.32)}
+.cal-day i{position:absolute; left:50%; bottom:6px; transform:translateX(-50%);
+  width:4px; height:4px; border-radius:50%; background:var(--blue-500)}
+.cal-day.on i{background:rgba(255,255,255,.85)}
+
 .day{display:flex; align-items:center; gap:12px; width:100%; text-align:left;
   padding:13px 15px; border-radius:15px; background:rgba(255,255,255,.72);
   border:1.5px solid rgba(255,255,255,.9); box-shadow:var(--shadow-s);
@@ -247,9 +275,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
 
 .dots{display:flex; justify-content:center; gap:6px; margin-top:12px}
-.dots i{width:6px; height:6px; border-radius:99px; background:rgba(140,170,220,.45);
+.dots i{width:5px; height:5px; border-radius:99px; background:rgba(150,175,215,.32);
   transition:width .28s cubic-bezier(.2,.8,.3,1), background .28s}
-.dots i.on{width:18px; background:var(--blue-600)}
+.dots i.on{width:11px; background:rgba(120,155,205,.58)}
 
 .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
 .stat{padding:14px 12px; border-radius:var(--r-md); background:var(--glass);
@@ -563,7 +591,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
     <div class="hero">
       <p class="big" id="h-left">0</p>
-      <p class="big-sub" id="h-left-label">kcal übrig heute</p>
+      <p class="big-sub" id="h-left-label">kcal verfügbar</p>
 
       <div class="rail"><span id="h-rail"></span></div>
       <div class="rail-legend">
