@@ -695,11 +695,9 @@ function renderHome(){
 
   $("#h-macros").innerHTML = MACROS.map(x => {
     const have = t.got[x.key], goal = t.macros[x.key] || 0;
-    const pct  = goal ? Math.min(100, have/goal*100) : 0;
-    return `<div class="macro ${x.key}">
+    return `<div class="macro ${x.key} ${have > goal ? "over" : ""}">
       <span class="eyebrow">${x.n}</span>
       <b>${num(have)}<span> / ${num(goal)} g</span></b>
-      <span class="mrail"><i class="${have > goal ? "over" : ""}" style="width:${pct}%"></i></span>
     </div>`;
   }).join("");
 
@@ -724,6 +722,22 @@ function renderHome(){
 
   $$("#h-log .del").forEach(b => b.onclick = () => delEntry(b.dataset.kind, b.dataset.id));
 }
+
+/* Punktanzeige des Kachel-Decks. Bei zwei Seiten reicht das Verhältnis von
+   Scrollposition zur maximalen Scrollweite. */
+(() => {
+  const deck = $("#h-deck");
+  const sync = () => {
+    const max = deck.scrollWidth - deck.clientWidth;
+    const i = max > 4 ? Math.round(deck.scrollLeft / max) : 0;
+    $$("#h-dots i").forEach((d, n) => d.classList.toggle("on", n === i));
+  };
+  deck.addEventListener("scroll", sync, { passive:true });
+  $$("#h-dots i").forEach((d, n) => d.onclick = () => {
+    const max = deck.scrollWidth - deck.clientWidth;
+    deck.scrollTo({ left: n * max, behavior:"smooth" });
+  });
+})();
 
 /* ─────────────────  9b. TAGESWECHSEL  ───────────────── */
 
