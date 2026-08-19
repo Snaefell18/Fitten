@@ -236,7 +236,22 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .rail span.over{background:linear-gradient(90deg,#F97316,var(--bad))}
 .rail-legend{display:flex; justify-content:space-between; font-size:13px; font-weight:600; color:var(--ink-3)}
 
-.stats{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:26px}
+/* Zwei Seiten à drei Kacheln, horizontal durchswipebar. Die Kacheln behalten
+   ihre Größe — es wandert nur die ganze Seite. */
+.deck{display:flex; gap:18px; margin:26px -18px 0; padding:0 18px;
+  overflow-x:auto; overflow-y:hidden;
+  scroll-snap-type:x mandatory; scroll-padding-left:18px;
+  -webkit-overflow-scrolling:touch; scrollbar-width:none}
+.deck::-webkit-scrollbar{display:none}
+.deck .page{flex:0 0 100%; scroll-snap-align:start;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
+
+.dots{display:flex; justify-content:center; gap:6px; margin-top:12px}
+.dots i{width:6px; height:6px; border-radius:99px; background:rgba(140,170,220,.45);
+  transition:width .28s cubic-bezier(.2,.8,.3,1), background .28s}
+.dots i.on{width:18px; background:var(--blue-600)}
+
+.stats{display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
 .stat{padding:14px 12px; border-radius:var(--r-md); background:var(--glass);
   backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
   border:1px solid var(--glass-line); box-shadow:var(--shadow-s)}
@@ -246,22 +261,18 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .stat.eat b{color:var(--blue-700)}
 .stat.move b{color:var(--good)}
 
-.macros{display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-top:9px}
-.macro{padding:13px 12px 14px; border-radius:var(--r-md); background:var(--glass);
+.macros{display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
+.macro{padding:14px 12px; border-radius:var(--r-md); background:var(--glass);
   backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
   border:1px solid var(--glass-line); box-shadow:var(--shadow-s)}
 .macro .eyebrow{font-size:10px}
 .macro b{display:block; margin-top:5px; font-size:18px; font-weight:750; letter-spacing:-.025em;
   font-variant-numeric:tabular-nums}
 .macro b span{font-size:12px; font-weight:600; color:var(--ink-3); letter-spacing:0}
-.macro .mrail{height:5px; border-radius:99px; background:rgba(255,255,255,.8); margin-top:9px;
-  overflow:hidden; box-shadow:inset 0 1px 1px rgba(13,38,90,.07)}
-.macro .mrail i{display:block; height:100%; width:0; border-radius:99px;
-  transition:width .7s cubic-bezier(.2,.8,.3,1)}
-.macro.pr b{color:var(--blue-700)}   .macro.pr .mrail i{background:var(--blue-600)}
-.macro.ch b{color:#0E9F63}           .macro.ch .mrail i{background:var(--good)}
-.macro.fa b{color:#C2740A}           .macro.fa .mrail i{background:var(--warn)}
-.macro .mrail i.over{background:var(--bad)}
+.macro.pr b{color:var(--blue-700)}
+.macro.ch b{color:#0E9F63}
+.macro.fa b{color:#C2740A}
+.macro.over b{color:var(--bad)}
 
 /* log list */
 .log{margin-top:20px; padding:6px 6px 6px}
@@ -560,22 +571,24 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <span id="h-budget">0 Budget</span>
       </div>
 
-      <div class="stats">
-        <div class="stat">
-          <span class="eyebrow">Grundbedarf</span>
-          <b id="h-tdee">0</b>
-        </div>
-        <div class="stat move">
-          <span class="eyebrow">Bewegung</span>
-          <b id="h-moved">0</b>
-        </div>
-        <div class="stat eat">
-          <span class="eyebrow">Gegessen</span>
-          <b id="h-eaten2">0</b>
+      <div class="deck" id="h-deck">
+        <div class="macros page" id="h-macros"></div>
+        <div class="stats page">
+          <div class="stat">
+            <span class="eyebrow">Grundbedarf</span>
+            <b id="h-tdee">0</b>
+          </div>
+          <div class="stat move">
+            <span class="eyebrow">Bewegung</span>
+            <b id="h-moved">0</b>
+          </div>
+          <div class="stat eat">
+            <span class="eyebrow">Gegessen</span>
+            <b id="h-eaten2">0</b>
+          </div>
         </div>
       </div>
-
-      <div class="macros" id="h-macros"></div>
+      <div class="dots" id="h-dots"><i class="on"></i><i></i></div>
 
       <div class="glass log" id="h-log"></div>
     </div>
