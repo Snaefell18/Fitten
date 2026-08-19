@@ -667,6 +667,9 @@ function renderHome(){
   // unbemerkt beim heutigen Datum.
   $("#a-photo").hidden = !today;
   $("#a-row").hidden   = !today;
+  // Ein Vorschlag ergibt nur für den laufenden Tag Sinn
+  $("#h-sug-page").hidden = !today;
+  $$("#h-dots i")[2].hidden = !today;
 
   const over = t.left < 0;
   $("#h-left").textContent = num(Math.abs(t.left));
@@ -709,7 +712,7 @@ function renderHome(){
         <span class="kc ${mv?"mv":""}">${mv?"+":""}${num(e.kcal)}</span>
         <button class="del" data-kind="${e.kind}" data-id="${e.id}" aria-label="Eintrag löschen">${ICON.trash}</button>
       </div>`;
-    }).join("") : `<p class="log-empty">Noch nichts erfasst. Fang mit einem Foto an.</p>`}`;
+    }).join("") : `<p class="log-empty">Noch nichts erfasst. Fang mit einer Mahlzeit oder einem Training an.</p>`}`;
 
   $$("#h-log .del").forEach(b => b.onclick = () => delEntry(b.dataset.kind, b.dataset.id));
 }
@@ -729,6 +732,80 @@ function renderHome(){
     deck.scrollTo({ left: n * max, behavior:"smooth" });
   });
 })();
+
+/* ─────────────────  9c. ESSENSVORSCHLAG  ───────────────── */
+
+const SUGGEST_ENDPOINT = "/api/suggest";
+
+$("#a-suggest").onclick = () => openSuggest();
+
+async function openSuggest(){
+  const t = totals();
+  openSheet("Vorschlag", `<div class="analyzing"><span class="spin"></span>
+    Passende Optionen werden gesucht …</div>`);
+
+  const p = S.profile;
+  const payload = {
+    left: t.left,
+    macrosLeft: {
+      pr: Math.max(0, t.macros.pr - t.got.pr),
+      ch: Math.max(0, t.macros.ch - t.got.ch),
+      fa: Math.max(0, t.macros.fa - t.got.fa)
+    },
+    diet: (DIETS.find(d => d.id === (p.diet || "all")) || DIETS[0]).n,
+    goal: (GOALS.find(g => g.id === p.goal) || GOALS[1]).n,
+    // foodsFor filtert Ernährungsform und Abneigungen bereits heraus
+    favorites: foodsFor(p).filter(f => p.foods.includes(f.id))
+      .map(f => ({ n:f.n, k:f.k, pr:f.pr, ch:f.ch, fa:f.fa })),
+    eatenToday: S.day.meals.map(m => m.name),
+    time: clock()
+  };
+
+  let data;
+  try {
+    const r = await fetch(SUGGEST_ENDPOINT, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload)
+    });
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("application/json"))
+      throw new Error(`${SUGGEST_ENDPOINT} liefert kein JSON (HTTP ${r.status}). Liegt api/suggest.js im Projekt-Root?`);
+    data = await r.json();
+    if (!r.ok) throw new Error(data.message || data.error || `HTTP ${r.status}`);
+  } catch (e) {
+    $("#sheet-body").innerHTML = `<div class="analyzing" style="color:#B42318; align-items:flex-start; line-height:1.45">
+      <span style="flex:1">Der Vorschlag hat nicht geklappt.<br>
+      <span style="font-weight:550; font-size:13.5px; color:var(--ink-2)">${esc(e.message || "Unbekannter Fehler")}</span></span></div>`;
+    return;
+  }
+
+  const opts = Array.isArray(data.options) ? data.options : [];
+  $("#sheet-body").innerHTML = `
+    <div class="res-total" style="margin-bottom:14px">
+      <span style="font-weight:650">Noch verfügbar</span><b>${num(Math.max(0, t.left))}</b></div>
+    ${opts.length ? opts.map((o, i) => `
+      <div class="sug-item">
+        <div class="top"><b>${esc(o.name || "Vorschlag")}</b><span>${num(o.kcal || 0)} kcal</span></div>
+        ${o.amount ? `<p class="amt">${esc(o.amount)}</p>` : ""}
+        ${o.why ? `<p class="why">${esc(o.why)}</p>` : ""}
+        <p class="mac">E ${num(o.pr||0)} g · K ${num(o.ch||0)} g · F ${num(o.fa||0)} g</p>
+        <button class="btn btn-glass btn-sm" data-i="${i}">Eintragen</button>
+      </div>`).join("") : ""}
+    ${data.note ? `<p class="hint" style="text-align:center; margin-top:14px">${esc(data.note)}</p>` : ""}`;
+
+  $$("#sheet-body .sug-item .btn").forEach(b => b.onclick = async () => {
+    const o = opts[+b.dataset.i];
+    await addEntry("meals", {
+      name: o.name || "Vorschlag",
+      detail: o.amount || "Vorschlag",
+      kcal: Math.round(o.kcal || 0),
+      pr: +(o.pr || 0), ch: +(o.ch || 0), fa: +(o.fa || 0),
+      src: "suggest"
+    });
+    closeSheet();
+    toast(`${num(Math.round(o.kcal || 0))} kcal eingetragen`);
+  });
+}
 
 /* ─────────────────  9b. TAGESWECHSEL  ───────────────── */
 

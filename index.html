@@ -274,6 +274,31 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .deck .page{flex:0 0 100%; scroll-snap-align:start;
   display:grid; grid-template-columns:repeat(3,1fr); gap:9px}
 
+/* Vorschlagskachel: volle Breite, gleiche Höhe wie die Kachelreihen */
+.sug{grid-column:1/-1; display:flex; align-items:center; gap:12px; text-align:left;
+  padding:14px 18px; border-radius:var(--r-md);
+  background:linear-gradient(180deg,var(--blue-500),var(--blue-600)); color:#fff;
+  box-shadow:0 2px 4px rgba(20,80,200,.20), 0 12px 26px rgba(20,80,200,.26);
+  transition:transform .15s}
+.sug:active{transform:scale(.98)}
+.sug .tx{flex:1; min-width:0}
+.sug .eyebrow{color:rgba(255,255,255,.72)}
+.sug b{display:block; margin-top:4px; font-size:16px; font-weight:700; letter-spacing:-.015em}
+.sug svg{width:18px; height:18px; opacity:.8; flex:none}
+
+/* Vorschlagsliste im Sheet */
+.sug-item{padding:14px 16px; border-radius:var(--r-md); background:rgba(255,255,255,.72);
+  border:1px solid rgba(255,255,255,.9); box-shadow:var(--shadow-s)}
+.sug-item+.sug-item{margin-top:10px}
+.sug-item .top{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+.sug-item .top b{font-size:16px; font-weight:700; letter-spacing:-.015em}
+.sug-item .top span{font-size:15px; font-weight:750; color:var(--blue-700);
+  font-variant-numeric:tabular-nums; white-space:nowrap}
+.sug-item .amt{font-size:13px; color:var(--ink-3); margin-top:2px}
+.sug-item .why{font-size:13.5px; color:var(--ink-2); line-height:1.45; margin:8px 0 0}
+.sug-item .mac{font-size:12.5px; font-weight:650; color:var(--ink-3); margin-top:8px}
+.sug-item .btn{margin-top:12px}
+
 .dots{display:flex; justify-content:center; gap:6px; margin-top:12px}
 .dots i{width:5px; height:5px; border-radius:99px; background:rgba(150,175,215,.32);
   transition:width .28s cubic-bezier(.2,.8,.3,1), background .28s}
@@ -615,8 +640,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
             <b id="h-eaten2">0</b>
           </div>
         </div>
+        <div class="page" id="h-sug-page">
+          <button class="sug" id="a-suggest">
+            <span class="tx"><span class="eyebrow">Vorschlag</span>
+              <b>Was kann ich noch essen?</b></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="dots" id="h-dots"><i class="on"></i><i></i></div>
+      <div class="dots" id="h-dots"><i class="on"></i><i></i><i></i></div>
 
       <div class="glass log" id="h-log"></div>
     </div>
