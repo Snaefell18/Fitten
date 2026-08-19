@@ -654,22 +654,13 @@ $("#ob-back").onclick = () => { if (S.obStep){ S.obStep--; renderOb(); } };
 
 const CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
-function dayLabel(key, opts = { weekday:"long", day:"numeric", month:"long" }){
-  const [y,m,d] = key.split("-").map(Number);
-  const date = new Date(y, m-1, d);
-  const diff = Math.round((new Date(todayKey()) - new Date(key)) / 86400000);
-  if (diff === 0) return "Heute";
-  if (diff === 1) return "Gestern";
-  return date.toLocaleDateString("de-DE", opts);
-}
-
 function renderHome(){
   const t = totals();
   const today = viewingToday();
 
-  $("#h-date").innerHTML = (today
-      ? new Date().toLocaleDateString("de-DE", { weekday:"long", day:"numeric", month:"long" })
-      : dayLabel(S.dayKey)) + CHEVRON;
+  const [dy, dm, dd] = S.dayKey.split("-").map(Number);
+  $("#h-date").innerHTML = new Date(dy, dm-1, dd)
+    .toLocaleDateString("de-DE", { weekday:"long", day:"numeric", month:"long" }) + CHEVRON;
   $("#h-date").classList.toggle("past", !today);
 
   // Auf vergangenen Tagen wird nichts erfasst — sonst landet der Eintrag
@@ -680,7 +671,7 @@ function renderHome(){
   const over = t.left < 0;
   $("#h-left").textContent = num(Math.abs(t.left));
   $("#h-left").classList.toggle("over", over);
-  $("#h-left-label").textContent = over ? "kcal über dem Budget" : "kcal übrig heute";
+  $("#h-left-label").textContent = over ? "kcal über dem Budget" : "kcal verfügbar";
 
   const pct = Math.min(100, t.budget > 0 ? (t.eaten / t.budget) * 100 : 0);
   const rail = $("#h-rail");
@@ -744,32 +735,64 @@ function renderHome(){
 $("#h-date").onclick = () => openDays();
 
 async function openDays(){
-  openSheet("Tag wählen", `<div class="quick"><div class="analyzing">
-      <span class="spin"></span>Tage werden geladen …</div></div>`);
+  openSheet("Tag wählen", `<div class="analyzing"><span class="spin"></span>Kalender wird geladen …</div>`);
+
   let days;
   try { days = await listDays(); }
   catch { $("#sheet-body").innerHTML = `<p class="log-empty">Die Tage konnten nicht geladen werden.</p>`; return; }
 
-  const current = targetOf(S.profile);
-  $("#sheet-body").innerHTML = `<div class="quick">${days.map(d => {
-    const left = (d.target ?? current) + d.moved - d.eaten;
-    const sub  = d.n ? `${d.n} ${d.n === 1 ? "Eintrag" : "Einträge"} · ${num(d.eaten)} gegessen`
-                     + (d.moved ? ` · +${num(d.moved)} Bewegung` : "")
-                     : "noch nichts erfasst";
-    return `<button class="day ${d.key === S.dayKey ? "on" : ""}" data-key="${d.key}">
-      <span class="t-txt"><span class="t-ttl">${esc(dayLabel(d.key))}</span>
-        <span class="t-sub">${sub}</span></span>
-      <span class="bal ${left < 0 ? "over" : ""}">${left < 0 ? "+" : "−"}${num(Math.abs(left))}</span>
-    </button>`;
-  }).join("")}</div>
-  <p class="hint" style="text-align:center">Rechts steht das Rest-Budget des Tages.</p>`;
+  // nur Tage mit echten Einträgen bekommen einen Punkt
+  const have = new Map(days.filter(d => d.n > 0).map(d => [d.key, d]));
+  const [cy, cm] = S.dayKey.split("-").map(Number);
+  let cursor = new Date(cy, cm - 1, 1);          // angezeigter Monat
 
-  $$("#sheet-body .day").forEach(b => b.onclick = async () => {
-    S.pinned = b.dataset.key !== todayKey();
-    await loadDay(b.dataset.key);
-    renderHome();
-    closeSheet();
-  });
+  const ARROW = dir => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+    stroke-linecap="round" stroke-linejoin="round"><path d="${dir < 0 ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"}"/></svg>`;
+
+  function paint(){
+    const y = cursor.getFullYear(), m = cursor.getMonth();
+    const first = new Date(y, m, 1);
+    const lead  = (first.getDay() + 6) % 7;      // Woche beginnt montags
+    const dim   = new Date(y, m + 1, 0).getDate();
+    const today = todayKey();
+    const isCurrentMonth = y === +today.slice(0,4) && m === +today.slice(5,7) - 1;
+
+    let cells = "";
+    for (let i = 0; i < lead; i++) cells += `<span class="cal-day pad"></span>`;
+    for (let d = 1; d <= dim; d++){
+      const key = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const cls = [
+        "cal-day",
+        key > today            ? "future" : "",
+        have.has(key)          ? "has"    : "empty",
+        key === today          ? "today"  : "",
+        key === S.dayKey       ? "on"     : ""
+      ].filter(Boolean).join(" ");
+      cells += `<button class="${cls}" data-key="${key}">${d}${have.has(key) ? "<i></i>" : ""}</button>`;
+    }
+
+    $("#sheet-body").innerHTML = `
+      <div class="cal-head">
+        <button id="cal-prev" aria-label="Vorheriger Monat">${ARROW(-1)}</button>
+        <b>${cursor.toLocaleDateString("de-DE", { month:"long", year:"numeric" })}</b>
+        <button id="cal-next" aria-label="Nächster Monat" ${isCurrentMonth ? "disabled" : ""}>${ARROW(1)}</button>
+      </div>
+      <div class="cal-wd">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(w => `<span>${w}</span>`).join("")}</div>
+      <div class="cal-grid">${cells}</div>
+      <p class="hint" style="text-align:center">Ein Punkt markiert Tage mit Einträgen.</p>`;
+
+    $("#cal-prev").onclick = () => { cursor = new Date(y, m - 1, 1); paint(); };
+    $("#cal-next").onclick = () => { cursor = new Date(y, m + 1, 1); paint(); };
+
+    $$("#sheet-body .cal-day[data-key]").forEach(b => b.onclick = async () => {
+      S.pinned = b.dataset.key !== todayKey();
+      await loadDay(b.dataset.key);
+      renderHome();
+      closeSheet();
+    });
+  }
+
+  paint();
 }
 
 /* ─────────────────  10. SHEET-SYSTEM  ───────────────── */
