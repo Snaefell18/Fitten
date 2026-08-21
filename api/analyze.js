@@ -49,7 +49,60 @@ ohne Text davor oder danach, in genau diesem Format:
 }
 
 Ist auf dem Bild kein Essen zu sehen, gib total_kcal 0, alle Makros 0,
-confidence "niedrig" und erkläre das in note.`;
+confidence "niedrig" und erkläre das in note.
+
+Halte "note" auf einen kurzen Satz. Gib nur das JSON aus, keine Erläuterungen.`;
+
+/* ── JSON robust aus der Modellantwort holen ──────────────────────────
+   Stärkere Modelle formulieren ausführlicher. Ohne Absicherung kippt das
+   Parsen, sobald ein Vorspann davorsteht oder die Antwort ins Token-Limit
+   läuft. Drei Stufen: Text einsammeln, balancierte Klammer suchen, und im
+   Notfall eine abgeschnittene Antwort schließen. */
+function collectText(raw, prefill = ""){
+  return prefill + (raw.content || [])
+    .filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+function sliceBalanced(t){
+  const start = t.indexOf("{");
+  if (start < 0) return null;
+  t = t.slice(start);
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < t.length; i++){
+    const c = t[i];
+    if (inStr){
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return t.slice(0, i + 1);
+  }
+  return t;                       // unvollständig – Reparatur versucht es weiter
+}
+
+function repair(t){
+  const base = t.replace(/,\s*$/, "");
+  for (const suf of ['"}]}', '"}}', "}]}", "]}", "}}", "}"]){
+    try { return JSON.parse(base + suf); } catch {}
+  }
+  const cut = base.lastIndexOf("}");        // bis zum letzten vollständigen Objekt
+  if (cut > 0) for (const suf of ["]}", "}"]){
+    try { return JSON.parse(base.slice(0, cut + 1) + suf); } catch {}
+  }
+  return null;
+}
+
+function parseModelJson(raw, prefill = ""){
+  const text = collectText(raw, prefill);
+  const clean = text.replace(/^```(?:json)?/i, "").replace(/```\s*$/, "").trim();
+  const sliced = sliceBalanced(clean);
+  if (!sliced) return { data:null, text:clean };
+  try { return { data: JSON.parse(sliced), text:clean }; } catch {}
+  return { data: repair(sliced), text:clean };
+}
 
 export const config = { maxDuration: 60 };
 
@@ -132,9 +185,13 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: modelFor(tier),
-        max_tokens: 800,
+        max_tokens: 1400,
         system: SYSTEM,
-        messages: [{ role: "user", content }]
+        // Antwort mit "{" vorbelegen — dann kann kein Vorspann davorstehen
+        messages: [
+          { role: "user", content },
+          { role: "assistant", content: "{" }
+        ]
       })
     });
     clearTimeout(timer);
@@ -158,16 +215,16 @@ export default async function handler(req, res) {
   }
 
   /* ── Modellantwort in JSON überführen ───────────────────────── */
-  try {
-    const text = (raw.content || [])
-      .filter(b => b.type === "text").map(b => b.text).join("").trim();
-    const clean = text.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(clean.slice(clean.indexOf("{"), clean.lastIndexOf("}") + 1));
-    return res.status(200).json(parsed);
-  } catch {
-    return res.status(500).json({
-      error: "bad_model_output",
-      message: "Claude hat kein verwertbares JSON geliefert."
-    });
-  }
+  const { data, text } = parseModelJson(raw, "{");
+  if (data) return res.status(200).json(data);
+
+  return res.status(500).json({
+    error: "bad_model_output",
+    stop_reason: raw.stop_reason || null,
+    model: modelFor(tier),
+    message: raw.stop_reason === "max_tokens"
+      ? "Die Antwort war zu lang und wurde abgeschnitten."
+      : "Claude hat kein verwertbares JSON geliefert.",
+    raw_preview: String(text).slice(0, 300)
+  });
 }
