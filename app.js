@@ -812,9 +812,9 @@ const SEND_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 async function openCoach(){
   if (!hasCoach()){ toast("Der Coach ist Teil von Premium und Ultra+."); return; }
 
-  openSheet("Coach", `<div class="analyzing"><span class="spin"></span>Verlauf wird geladen …</div>`,
+  openSheet("", `<div class="analyzing"><span class="spin"></span>Verlauf wird geladen …</div>`,
     `<div class="chat-in">
-       <textarea id="cc-in" rows="1" placeholder="Frag mich etwas zu Ernährung oder Training"></textarea>
+       <textarea id="cc-in" rows="1" placeholder="Deine Frage"></textarea>
        <button class="chat-send" id="cc-send" aria-label="Senden" disabled>${SEND_ICON}</button>
      </div>`);
 
