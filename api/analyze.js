@@ -1,176 +1,106 @@
 /* ══════════════════════════════════════════════════════════════════
-   /api/analyze.js
-   Vercel Serverless Function
+   /api/analyze.js  —  Vercel Serverless Function
+   Muss liegen unter: <projekt-root>/api/analyze.js
+
+   Schätzt Kalorien und Makros aus Foto und/oder Textbeschreibung.
+   Nutzt Structured Outputs (output_config.format): Claude wird per
+   Grammatik auf das Schema festgelegt, deshalb ist kein Parsen von
+   Fließtext mehr nötig.
+
+   Health-Check: /api/analyze im Browser aufrufen.
    ══════════════════════════════════════════════════════════════════ */
 
+/* Modell nach Mitgliedschaft. Serverseitig gemappt, damit über den
+   Request kein beliebiges Modell untergeschoben werden kann. */
 const MODELS = {
   basis:   "claude-haiku-4-5-20251001",
   premium: "claude-sonnet-5",
   ultra:   "claude-opus-5"
 };
+const modelFor = tier => MODELS[tier] || MODELS.basis;
 
-function modelFor(tier) {
-  return MODELS[tier] || MODELS.basis;
-}
+const SYSTEM = `Du schätzt Kalorien für eine Fitness-App — aus einem Essensfoto,
+aus einer Textbeschreibung oder aus beidem.
 
+Vorgehen bei einem Foto:
+1. Benenne jede erkennbare Komponente einzeln. Beilagen, Soßen, Öl und
+   Getränke nicht vergessen.
+2. Schätze die Menge in Gramm oder Stück anhand von Tellergröße, Besteck
+   und Bildwinkel.
+3. Rechne die Kalorien je Komponente aus.
 
-/* ══════════════════════════════════════════════════════════════════
-   SYSTEM PROMPT
-   ══════════════════════════════════════════════════════════════════ */
-
-const SYSTEM = `
-Du schätzt Kalorien für eine Fitness-App — entweder aus einem
-Essensfoto, aus einer Textbeschreibung oder aus beidem.
-
-Bekommst du nur Text, gehst du von haushaltsüblichen Portionen aus,
-sofern der Nutzer keine Mengen nennt, und hältst das in "note" fest.
-
-Bei einem Foto:
-
-1. Benenne jede erkennbare Komponente einzeln.
-   Beilagen, Soßen, Öl und Getränke nicht vergessen.
-
-2. Schätze die Menge in Gramm oder Stück anhand von Tellergröße,
-   Besteck und Bildwinkel.
-
-3. Schätze die Kalorien jeder Komponente.
+Ohne Foto gehst du von haushaltsüblichen Portionen aus, sofern keine Menge
+genannt wird, und hältst diese Annahme in "note" fest.
 
 Der Nutzerkommentar korrigiert immer deine Bildschätzung, nicht umgekehrt.
+Bei Angaben wie "halbe Portion" skalierst du entsprechend.
 
-Bei Mengenangaben wie "halbe Portion" skalierst du entsprechend.
+Schätze außerdem die Makros der gesamten Mahlzeit in Gramm: pr = Eiweiß,
+ch = Kohlenhydrate, fa = Fett. Sie sollten grob zu den Kalorien passen
+(Eiweiß und Kohlenhydrate je 4 kcal/g, Fett 9 kcal/g).
 
-4. Schätze zusätzlich die Makronährstoffe der gesamten Mahlzeit:
-   pr = Eiweiß in Gramm
-   ch = Kohlenhydrate in Gramm
-   fa = Fett in Gramm
+Ist kein Essen zu erkennen, setzt du total_kcal und alle Makros auf 0,
+confidence auf "niedrig" und erklärst das in "note".
 
-Die Makros sollten grob zu den Kalorien passen:
-Eiweiß = 4 kcal/g
-Kohlenhydrate = 4 kcal/g
-Fett = 9 kcal/g
+"note" ist immer genau ein kurzer Satz.`;
 
-Ist auf dem Bild kein Essen zu sehen:
-total_kcal = 0
-pr = 0
-ch = 0
-fa = 0
-confidence = "niedrig"
-
-Erkläre das in note.
-
-note muss immer nur aus einem kurzen Satz bestehen.
-`;
-
-
-/* ══════════════════════════════════════════════════════════════════
-   JSON SCHEMA
-   ══════════════════════════════════════════════════════════════════ */
-
-const OUTPUT_SCHEMA = {
+/* Schema für die Antwort. Alle Felder required — das hält die Grammatik
+   klein und sichert die Reihenfolge der Ausgabe. */
+const SCHEMA = {
   type: "object",
-
   properties: {
-    title: {
-      type: "string",
-      description: "Kurzer Name des Gerichts auf Deutsch."
-    },
-
+    title:      { type: "string",  description: "Kurzer Name des Gerichts auf Deutsch." },
     items: {
       type: "array",
+      description: "Einzelne Komponenten der Mahlzeit.",
       items: {
         type: "object",
         properties: {
-          name: {
-            type: "string",
-            description: "Name der einzelnen Komponente."
-          },
-          amount: {
-            type: "string",
-            description: "Geschätzte Menge, z.B. 180 g oder 2 Stück."
-          },
-          kcal: {
-            type: "integer",
-            description: "Geschätzte Kalorien der Komponente."
-          }
+          name:   { type: "string",  description: "Name der Komponente." },
+          amount: { type: "string",  description: "Geschätzte Menge, z. B. 180 g oder 2 Stück." },
+          kcal:   { type: "integer", description: "Kalorien dieser Komponente." }
         },
         required: ["name", "amount", "kcal"],
         additionalProperties: false
       }
     },
-
-    total_kcal: {
-      type: "integer",
-      description: "Gesamtkalorien der Mahlzeit."
-    },
-
-    pr: {
-      type: "integer",
-      description: "Eiweiß in Gramm."
-    },
-
-    ch: {
-      type: "integer",
-      description: "Kohlenhydrate in Gramm."
-    },
-
-    fa: {
-      type: "integer",
-      description: "Fett in Gramm."
-    },
-
-    confidence: {
-      type: "string",
-      enum: ["hoch", "mittel", "niedrig"]
-    },
-
-    note: {
-      type: "string",
-      description: "Kurzer Satz mit den wichtigsten Annahmen."
-    }
+    total_kcal: { type: "integer", description: "Gesamtkalorien der Mahlzeit." },
+    pr:         { type: "integer", description: "Eiweiß in Gramm." },
+    ch:         { type: "integer", description: "Kohlenhydrate in Gramm." },
+    fa:         { type: "integer", description: "Fett in Gramm." },
+    confidence: { type: "string",  enum: ["hoch", "mittel", "niedrig"] },
+    note:       { type: "string",  description: "Ein kurzer Satz zu den Annahmen." }
   },
-
-  required: [
-    "title",
-    "items",
-    "total_kcal",
-    "pr",
-    "ch",
-    "fa",
-    "confidence",
-    "note"
-  ],
-
+  required: ["title", "items", "total_kcal", "pr", "ch", "fa", "confidence", "note"],
   additionalProperties: false
 };
 
+export const config = { maxDuration: 60 };
 
-/* ══════════════════════════════════════════════════════════════════
-   VERCEL
-   ══════════════════════════════════════════════════════════════════ */
+/* Notnagel: Structured Outputs liefern gültiges JSON — außer die Antwort
+   läuft ins Token-Limit. Dann wird hier so viel wie möglich gerettet. */
+function salvage(text){
+  const t = String(text || "").trim();
+  const start = t.indexOf("{");
+  if (start < 0) return null;
+  const body = t.slice(start).replace(/,\s*$/, "");
+  for (const suffix of ["", '"}]}', '"}}', "}]}", "]}", "}}", "}"]){
+    try { return JSON.parse(body + suffix); } catch {}
+  }
+  const cut = body.lastIndexOf("}");
+  if (cut > 0) for (const suffix of ["]}", "}"]){
+    try { return JSON.parse(body.slice(0, cut + 1) + suffix); } catch {}
+  }
+  return null;
+}
 
-export const config = {
-  maxDuration: 60
-};
-
-
-/* ══════════════════════════════════════════════════════════════════
-   HANDLER
-   ══════════════════════════════════════════════════════════════════ */
-
-export default async function handler(req, res) {
-
+export default async function handler(req, res){
+  /* Alles umschlossen: ohne diesen Rahmen zeigt Vercel bei einem
+     unerwarteten Fehler nur FUNCTION_INVOCATION_FAILED ohne Hinweis. */
   try {
-
     const key = process.env.ANTHROPIC_API_KEY;
 
-
-    /* ──────────────────────────────────────────────────────────────
-       HEALTH CHECK
-       GET /api/analyze
-       ────────────────────────────────────────────────────────────── */
-
-    if (req.method === "GET") {
-
+    if (req.method === "GET"){
       return res.status(200).json({
         function_reachable: true,
         api_key_present: Boolean(key),
@@ -179,371 +109,127 @@ export default async function handler(req, res) {
         models: MODELS,
         node: process.version
       });
-
     }
 
+    if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
-    /* ──────────────────────────────────────────────────────────────
-       METHOD
-       ────────────────────────────────────────────────────────────── */
+    if (!key) return res.status(500).json({
+      error: "missing_key",
+      message: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel unter Settings → " +
+               "Environment Variables anlegen und danach neu deployen."
+    });
 
-    if (req.method !== "POST") {
-
-      return res.status(405).json({
-        error: "method_not_allowed"
-      });
-
+    /* ── Body lesen ── */
+    let body = req.body;
+    if (typeof body === "string"){
+      try { body = JSON.parse(body); } catch { body = null; }
     }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       API KEY
-       ────────────────────────────────────────────────────────────── */
-
-    if (!key) {
-
-      return res.status(500).json({
-        error: "missing_key",
-        message:
-          "ANTHROPIC_API_KEY ist in Vercel nicht gesetzt. " +
-          "Unter Settings → Environment Variables anlegen und neu deployen."
-      });
-
+    if (!body || typeof body !== "object"){
+      try {
+        const chunks = [];
+        for await (const c of req) chunks.push(c);
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      } catch {
+        return res.status(400).json({ error: "bad_body", message: "Anfrage konnte nicht gelesen werden." });
+      }
     }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       BODY
-       ────────────────────────────────────────────────────────────── */
-
-    let body;
-
-    try {
-
-      body =
-        typeof req.body === "string"
-          ? JSON.parse(req.body)
-          : req.body;
-
-    } catch (error) {
-
-      return res.status(400).json({
-        error: "bad_body",
-        message: "Der Request-Body enthält kein gültiges JSON."
-      });
-
-    }
-
-    if (!body || typeof body !== "object") {
-
-      return res.status(400).json({
-        error: "bad_body",
-        message: "Kein gültiger Request-Body erhalten."
-      });
-
-    }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       INPUT
-       ────────────────────────────────────────────────────────────── */
 
     const image = body.image || null;
-    const mime = body.mime || "image/jpeg";
-    const note = String(body.note || "").trim();
-    const tier = String(body.tier || "basis").toLowerCase();
+    const mime  = body.mime || "image/jpeg";
+    const note  = String(body.note || "").trim();
+    const tier  = String(body.tier || "basis").toLowerCase();
 
-
-    if (!image && !note) {
-
-      return res.status(400).json({
-        error: "no_input",
-        message: "Weder Bild noch Beschreibung übermittelt."
-      });
-
+    if (!image && !note){
+      return res.status(400).json({ error: "no_input", message: "Weder Bild noch Beschreibung übermittelt." });
     }
 
-
-    /* ──────────────────────────────────────────────────────────────
-       PROMPT
-       ────────────────────────────────────────────────────────────── */
-
-    let prompt;
-
-    if (image) {
-
-      prompt = note
-        ? `Analysiere diese Mahlzeit.
-
-Zusatz-Info vom Nutzer:
-"${note}"`
-
-        : "Analysiere diese Mahlzeit.";
-
-    } else {
-
-      prompt =
-        `Der Nutzer beschreibt seine Mahlzeit so:
-
-"${note}"
-
-Schätze die Kalorien und Makronährstoffe dieser Mahlzeit.`;
-
-    }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       CONTENT
-       ────────────────────────────────────────────────────────────── */
+    const prompt = image
+      ? (note ? `Analysiere diese Mahlzeit. Zusatz-Info vom Nutzer: "${note}"`
+              : "Analysiere diese Mahlzeit.")
+      : `Der Nutzer beschreibt seine Mahlzeit so: "${note}"\n\nSchätze Kalorien und Makros.`;
 
     const content = image
+      ? [{ type: "image", source: { type: "base64", media_type: mime, data: image } },
+         { type: "text", text: prompt }]
+      : [{ type: "text", text: prompt }];
 
-      ? [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mime,
-              data: image
-            }
-          },
-
-          {
-            type: "text",
-            text: prompt
-          }
-        ]
-
-      : [
-          {
-            type: "text",
-            text: prompt
-          }
-        ];
-
-
-    /* ──────────────────────────────────────────────────────────────
-       ANTHROPIC API
-       ────────────────────────────────────────────────────────────── */
-
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 45000);
-
-
-    let response;
+    /* ── Anthropic aufrufen ── */
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    let response, rawText;
 
     try {
-
-      response = await fetch(
-        "https://api.anthropic.com/v1/messages",
-        {
-          method: "POST",
-
-          signal: controller.signal,
-
-          headers: {
-            "content-type": "application/json",
-            "x-api-key": key,
-            "anthropic-version": "2023-06-01"
-          },
-
-          body: JSON.stringify({
-
-            model: modelFor(tier),
-
-            max_tokens: 1400,
-
-            system: SYSTEM,
-
-            messages: [
-              {
-                role: "user",
-                content
-              }
-            ],
-
-            /*
-             * WICHTIG:
-             * Kein Assistant-Prefill mehr.
-             *
-             * Anthropic Structured Outputs sorgen dafür,
-             * dass Claude valides JSON nach diesem Schema liefert.
-             */
-
-            output_config: {
-              format: {
-                type: "json_schema",
-                schema: OUTPUT_SCHEMA
-              }
-            }
-
-          })
-        }
-      );
-
-    } catch (error) {
-
-      clearTimeout(timeout);
-
-      console.error("Anthropic fetch failed:", error);
-
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: modelFor(tier),
+          max_tokens: 1500,
+          system: SYSTEM,
+          messages: [{ role: "user", content }],
+          // Grammatik-gestützte Ausgabe. Kein Prefill — das ist damit unvereinbar.
+          output_config: { format: { type: "json_schema", schema: SCHEMA } }
+        })
+      });
+      rawText = await response.text();
+    } catch (e) {
       return res.status(504).json({
         error: "upstream_failed",
-        message:
-          error.name === "AbortError"
-            ? "Zeitüberschreitung bei der Analyse."
-            : String(error.message || error)
+        message: e.name === "AbortError" ? "Zeitüberschreitung bei der Analyse." : String(e.message || e)
       });
-
+    } finally {
+      clearTimeout(timer);
     }
 
-    clearTimeout(timeout);
-
-
-    /* ──────────────────────────────────────────────────────────────
-       ANTHROPIC RESPONSE
-       ────────────────────────────────────────────────────────────── */
-
-    const responseText = await response.text();
-
-
-    if (!response.ok) {
-
-      let detail = responseText.slice(0, 1000);
-
-      try {
-
-        const parsed = JSON.parse(responseText);
-
-        detail =
-          parsed?.error?.message ||
-          parsed?.message ||
-          detail;
-
-      } catch {
-        // Originaltext behalten
-      }
-
-
-      console.error(
-        "Anthropic API error:",
-        response.status,
-        detail
-      );
-
-
+    if (!response.ok){
+      let detail = rawText.slice(0, 500);
+      try { detail = JSON.parse(rawText)?.error?.message || detail; } catch {}
+      console.error("Anthropic API error", response.status, detail);
       return res.status(502).json({
-        error: "anthropic_error",
-        status: response.status,
-        model: modelFor(tier),
-        message: detail
+        error: "anthropic_error", status: response.status,
+        model: modelFor(tier), message: detail
       });
-
     }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       RESPONSE PARSEN
-       ────────────────────────────────────────────────────────────── */
 
     let raw;
-
-    try {
-
-      raw = JSON.parse(responseText);
-
-    } catch (error) {
-
-      console.error(
-        "Anthropic returned invalid JSON:",
-        responseText.slice(0, 500)
-      );
-
-      return res.status(502).json({
-        error: "invalid_anthropic_response",
-        message: "Anthropic hat keine gültige API-Antwort geliefert."
-      });
-
+    try { raw = JSON.parse(rawText); }
+    catch {
+      return res.status(502).json({ error: "invalid_anthropic_response",
+        message: "Antwort der Anthropic-API war kein gültiges JSON." });
     }
 
+    const text = (raw.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
 
-    const textBlock =
-      raw?.content?.find(
-        block => block.type === "text"
-      );
+    let result = null;
+    try { result = JSON.parse(text); } catch { result = salvage(text); }
 
-
-    const outputText =
-      textBlock?.text?.trim() || "";
-
-
-    if (!outputText) {
-
-      return res.status(502).json({
-        error: "empty_model_output",
-        model: modelFor(tier),
-        stop_reason: raw.stop_reason || null,
-        message: "Claude hat keine Textantwort zurückgegeben."
-      });
-
-    }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       JSON PARSEN
-       ────────────────────────────────────────────────────────────── */
-
-    let result;
-
-    try {
-
-      result = JSON.parse(outputText);
-
-    } catch (error) {
-
-      console.error(
-        "Claude returned invalid structured output:",
-        outputText.slice(0, 1000)
-      );
-
+    if (!result){
       return res.status(502).json({
         error: "bad_model_output",
         model: modelFor(tier),
-        message: "Claude hat kein gültiges JSON zurückgegeben.",
-        raw_preview: outputText.slice(0, 500)
+        stop_reason: raw.stop_reason || null,
+        message: raw.stop_reason === "max_tokens"
+          ? "Die Antwort war zu lang und wurde abgeschnitten."
+          : raw.stop_reason === "refusal"
+            ? "Claude hat die Anfrage abgelehnt."
+            : "Claude hat kein verwertbares JSON geliefert.",
+        raw_preview: text.slice(0, 300)
       });
-
     }
-
-
-    /* ──────────────────────────────────────────────────────────────
-       SUCCESS
-       ────────────────────────────────────────────────────────────── */
 
     return res.status(200).json(result);
 
-
-  } catch (error) {
-
-    /*
-     * Letzte Sicherheitsstufe:
-     * Dadurch sollte Vercel nicht mehr einfach
-     * FUNCTION_INVOCATION_FAILED anzeigen.
-     */
-
-    console.error(
-      "UNHANDLED FUNCTION ERROR:",
-      error
-    );
-
+  } catch (e) {
+    console.error("UNHANDLED FUNCTION ERROR", e);
     return res.status(500).json({
       error: "internal_function_error",
-      message: String(error?.message || error)
+      message: String(e?.message || e),
+      stack: String(e?.stack || "").split("\n").slice(0, 4).join(" | ")
     });
-
   }
-
 }
