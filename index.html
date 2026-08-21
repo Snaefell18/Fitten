@@ -285,6 +285,30 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .icon-btn svg{width:20px; height:20px}
 
 .hero{margin-bottom:auto}
+
+/* Stufen-Abzeichen — nimmt Farbwelt und Verläufe der Mitgliedschafts-Kacheln
+   aus den Einstellungen auf, nur im Kleinformat. */
+.tier{display:inline-flex; align-items:center; gap:7px; margin:0 0 12px;
+  padding:6px 13px 6px 11px; border-radius:99px;
+  font-size:10.5px; font-weight:800; letter-spacing:.10em; text-transform:uppercase;
+  transition:transform .15s}
+.tier:active{transform:scale(.94)}
+.tier svg{width:11px; height:11px; flex:none}
+
+.tier.basis{background:var(--glass-strong); border:1px solid var(--glass-line);
+  color:var(--ink-2); box-shadow:var(--shadow-s);
+  backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%)}
+.tier.basis svg{opacity:.6}
+
+.tier.premium{background:linear-gradient(160deg,#1B5FD9,#0E3C93); color:#fff;
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 2px 4px rgba(11,44,110,.24), 0 8px 20px rgba(11,44,110,.30)}
+
+.tier.ultra{color:#fff; border:1px solid rgba(255,255,255,.16);
+  background:
+    radial-gradient(120% 140% at 18% 0%, rgba(122,162,255,.32), transparent 60%),
+    linear-gradient(160deg,#2A2F3C 0%,#141821 45%,#080A0F 100%);
+  box-shadow:0 2px 4px rgba(0,0,0,.28), 0 8px 22px rgba(0,0,0,.34)}
 .big{font-size:clamp(60px,19vw,92px); font-weight:800; letter-spacing:-.055em; line-height:.92;
   margin:0; font-variant-numeric:tabular-nums}
 .big.over{color:var(--bad)}
@@ -675,6 +699,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
 
     <div class="hero">
+      <button class="tier" id="h-tier"></button>
       <p class="big" id="h-left">0</p>
       <p class="big-sub" id="h-left-label">kcal verfügbar</p>
 
