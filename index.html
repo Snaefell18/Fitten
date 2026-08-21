@@ -166,10 +166,40 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .item .t-txt span,.qitem .t-txt span{display:block}
 .tile .t-val{font-size:13px; font-weight:700; color:var(--blue-600); white-space:nowrap}
 .check{width:24px; height:24px; border-radius:50%; border:2px solid rgba(140,170,220,.55);
-  flex:none; display:grid; place-items:center; transition:all .18s}
+  flex:none; display:grid; place-items:center; transition:all .18s; color:#fff}
 .check svg{width:13px; height:13px; opacity:0; transform:scale(.5); transition:all .18s}
 .tile.sel .check{background:var(--blue-600); border-color:var(--blue-600)}
 .tile.sel .check svg{opacity:1; transform:none}
+
+/* Mitgliedschafts-Kacheln: farblich abgestuft, damit die Stufen sofort
+   auseinanderzuhalten sind. Basis bleibt die normale Glaskachel. */
+.tiers .tile[data-id="premium"]{
+  background:linear-gradient(160deg,#1B5FD9,#0E3C93);
+  border-color:rgba(255,255,255,.22);
+  box-shadow:0 2px 5px rgba(11,44,110,.28), 0 14px 30px rgba(11,44,110,.30)}
+.tiers .tile[data-id="ultra"]{
+  background:
+    radial-gradient(120% 90% at 15% 0%, rgba(122,162,255,.28), transparent 55%),
+    linear-gradient(160deg,#2A2F3C 0%,#141821 45%,#080A0F 100%);
+  border-color:rgba(255,255,255,.16);
+  box-shadow:0 2px 5px rgba(0,0,0,.32), 0 14px 32px rgba(0,0,0,.34)}
+
+.tiers .tile[data-id="premium"] .t-ttl,
+.tiers .tile[data-id="ultra"]   .t-ttl{color:#fff}
+.tiers .tile[data-id="premium"] .t-sub,
+.tiers .tile[data-id="ultra"]   .t-sub{color:rgba(255,255,255,.72)}
+.tiers .tile[data-id="premium"] .check,
+.tiers .tile[data-id="ultra"]   .check{border-color:rgba(255,255,255,.45)}
+
+/* Ausgewählt: heller Haken auf dunklem Grund */
+.tiers .tile[data-id="premium"].sel,
+.tiers .tile[data-id="ultra"].sel{background-blend-mode:normal}
+.tiers .tile[data-id="premium"].sel{box-shadow:0 0 0 3px rgba(59,135,255,.32), 0 14px 30px rgba(11,44,110,.30);
+  border-color:rgba(255,255,255,.5)}
+.tiers .tile[data-id="ultra"].sel{box-shadow:0 0 0 3px rgba(180,200,255,.30), 0 14px 32px rgba(0,0,0,.36);
+  border-color:rgba(255,255,255,.45)}
+.tiers .tile[data-id="premium"].sel .check{background:#fff; border-color:#fff; color:#123C86}
+.tiers .tile[data-id="ultra"].sel   .check{background:#fff; border-color:#fff; color:#12151C}
 
 /* chips for multi-select grids */
 .group-label{font-size:12px; font-weight:750; letter-spacing:.07em; text-transform:uppercase;
