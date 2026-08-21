@@ -75,6 +75,14 @@ const SCHEMA = {
   additionalProperties: false
 };
 
+/* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt
+   Denken UND Antwort zusammen. Ohne Abschalten bleibt bei knappem Budget
+   kein Platz für den eigentlichen Text. Haiku 4.5 kennt den Schalter nicht,
+   deshalb nur für die neueren Modelle setzen. */
+function thinkingOff(model){
+  return /^claude-(sonnet|opus)-5/.test(model) ? { thinking: { type: "disabled" } } : {};
+}
+
 export const config = { maxDuration: 60 };
 
 /* Notnagel: Structured Outputs liefern gültiges JSON — außer die Antwort
@@ -169,7 +177,8 @@ export default async function handler(req, res){
         },
         body: JSON.stringify({
           model: modelFor(tier),
-          max_tokens: 1500,
+          ...thinkingOff(modelFor(tier)),
+          max_tokens: 2000,
           system: SYSTEM,
           messages: [{ role: "user", content }],
           // Grammatik-gestützte Ausgabe. Kein Prefill — das ist damit unvereinbar.
