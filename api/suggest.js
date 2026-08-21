@@ -65,6 +65,14 @@ const SCHEMA = {
   additionalProperties: false
 };
 
+/* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt
+   Denken UND Antwort zusammen. Ohne Abschalten bleibt bei knappem Budget
+   kein Platz für den eigentlichen Text. Haiku 4.5 kennt den Schalter nicht,
+   deshalb nur für die neueren Modelle setzen. */
+function thinkingOff(model){
+  return /^claude-(sonnet|opus)-5/.test(model) ? { thinking: { type: "disabled" } } : {};
+}
+
 export const config = { maxDuration: 60 };
 
 function salvage(text){
@@ -156,7 +164,8 @@ Was passt jetzt noch?`;
         },
         body: JSON.stringify({
           model: modelFor(tier),
-          max_tokens: 2000,
+          ...thinkingOff(modelFor(tier)),
+          max_tokens: 2500,
           system: SYSTEM,
           messages: [{ role: "user", content: prompt }],
           output_config: { format: { type: "json_schema", schema: SCHEMA } }
