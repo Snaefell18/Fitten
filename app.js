@@ -166,7 +166,7 @@ const gprov = new GoogleAuthProvider();
 
 /* ─────────────────  4. STATE & HELFER  ───────────────── */
 
-const S = { uid:null, profile:null, day:null, dayKey:null, pinned:false, obStep:0, draft:{} };
+const S = { uid:null, profile:null, day:null, dayKey:null, pinned:false, chat:null, obStep:0, draft:{} };
 
 /* Der Boot-Screen bleibt mindestens so lange stehen, dass die Wortmarke
    ihre Einblendung zu Ende spielen kann — sonst blitzt er nur kurz auf. */
@@ -365,7 +365,7 @@ $("#li-google").onclick = () => doAuth(() => signInWithPopup(auth, gprov));
 
 onAuthStateChanged(auth, async user => {
   if (!user){
-    S.uid = null; S.profile = null;
+    S.uid = null; S.profile = null; S.chat = null;
     $("#install").classList.remove("on");
     screen("s-login");
     hideBoot();
@@ -683,6 +683,8 @@ function renderHome(){
     .toLocaleDateString("de-DE", { weekday:"long", day:"numeric", month:"long" }) + CHEVRON;
   $("#h-date").classList.toggle("past", !today);
 
+  $("#h-coach").hidden = !hasCoach();
+
   const tier = TIERS.find(t => t.id === (S.profile.tier || "basis")) || TIERS[0];
   $("#h-tier").className = "tier " + tier.id;
   $("#h-tier").innerHTML = TIER_MARK[tier.id] + tier.n;
@@ -756,6 +758,124 @@ function renderHome(){
     deck.scrollTo({ left: n * max, behavior:"smooth" });
   });
 })();
+
+/* ─────────────────  9d. COACH-CHAT  ───────────────── */
+
+const COACH_ENDPOINT = "/api/coach";
+const GREETING = "Hey, ich bin dein persönlicher Fitness- und Ernährungscoach. " +
+                 "Wie kann ich dir heute beim Erreichen deiner Ziele behilflich sein?";
+const CHAT_KEEP = 60;   // so viele Nachrichten bleiben gespeichert
+
+const hasCoach = () => ["premium","ultra"].includes(S.profile?.tier);
+const chatRef  = () => doc(db, "users", S.uid, "chat", "main");
+
+async function loadChat(){
+  try {
+    const snap = await getDoc(chatRef());
+    S.chat = snap.exists() && Array.isArray(snap.data().messages) ? snap.data().messages : [];
+  } catch { S.chat = []; }
+  if (!S.chat.length) S.chat = [{ role:"assistant", content: GREETING, t: clock() }];
+}
+async function saveChat(){
+  try { await setDoc(chatRef(), { messages: S.chat.slice(-CHAT_KEEP) }); } catch {}
+}
+
+/* Alles, was für eine gute Antwort hilfreich ist — der Coach soll nicht
+   nach Dingen fragen müssen, die die App längst weiß. */
+function coachContext(){
+  const p = S.profile, t = totals();
+  const name = (arr, id) => (arr.find(x => x.id === id) || {}).n;
+  const foodNames = ids => allFoods(p).filter(f => ids.includes(f.id)).map(f => f.n);
+  return {
+    weight:p.weight, height:p.height, age:p.age, sex:p.sex,
+    bmr: bmrOf(p), tdee: t.tdee, target: t.target,
+    lifestyle: name(LIFESTYLE, p.lifestyle),
+    goal:      name(GOALS, p.goal),
+    diet:      name(DIETS, p.diet || "all"),
+    macroTarget: t.macros, got: t.got,
+    eaten: t.eaten, moved: t.moved, left: t.left,
+    eatenToday: S.day.meals.map(m => m.name),
+    favorites:  foodNames(p.foods || []),
+    dislikes:   foodNames(p.excluded || []),
+    avoid:      p.customDislikes || [],
+    customFoods:(p.customFoods || []).map(f => f.n),
+    activities: ACTIVITIES.filter(a => (p.activities||[]).includes(a.id)).map(a => a.n),
+    time: clock()
+  };
+}
+
+$("#h-coach").onclick = () => openCoach();
+
+const SEND_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+  stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+
+async function openCoach(){
+  if (!hasCoach()){ toast("Der Coach ist Teil von Premium und Ultra+."); return; }
+
+  openSheet("Coach", `<div class="analyzing"><span class="spin"></span>Verlauf wird geladen …</div>`,
+    `<div class="chat-in">
+       <textarea id="cc-in" rows="1" placeholder="Frag mich etwas zu Ernährung oder Training"></textarea>
+       <button class="chat-send" id="cc-send" aria-label="Senden" disabled>${SEND_ICON}</button>
+     </div>`);
+
+  if (!S.chat) await loadChat();
+  paintChat();
+
+  const input = $("#cc-in"), send = $("#cc-send");
+  const grow = () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 130) + "px";
+    send.disabled = !input.value.trim();
+  };
+  input.oninput = grow;
+  input.onkeydown = e => {
+    // Enter sendet, Shift+Enter macht einen Zeilenumbruch
+    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); ask(); }
+  };
+  send.onclick = ask;
+  setTimeout(grow, 0);
+
+  async function ask(){
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = ""; grow();
+    S.chat.push({ role:"user", content:text, t: clock() });
+    paintChat(true);
+    saveChat();
+
+    try {
+      const r = await fetch(COACH_ENDPOINT, {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          messages: S.chat.map(m => ({ role:m.role, content:m.content })),
+          context: coachContext(),
+          tier: S.profile.tier
+        })
+      });
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("application/json"))
+        throw new Error(`${COACH_ENDPOINT} liefert kein JSON (HTTP ${r.status}). Liegt api/coach.js im Projekt-Root?`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || data.error || `HTTP ${r.status}`);
+      S.chat.push({ role:"assistant", content:data.reply, t: clock() });
+      paintChat();
+      saveChat();
+    } catch (e) {
+      paintChat(false, e.message || "Unbekannter Fehler");
+    }
+  }
+}
+
+function paintChat(typing = false, error = null){
+  const body = $("#sheet-body");
+  if (!body) return;
+  body.innerHTML = `<div class="chat">
+    ${S.chat.map(m => `<div class="msg ${m.role === "user" ? "me" : "ai"}">${esc(m.content)}</div>`).join("")}
+    ${typing ? `<div class="msg ai typing"><i></i><i></i><i></i></div>` : ""}
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ""}
+  </div>`;
+  body.scrollTop = body.scrollHeight;
+}
 
 /* ─────────────────  9c. ESSENSVORSCHLAG  ───────────────── */
 
@@ -1291,6 +1411,13 @@ function openSettings(){
       </div>
     </div>
 
+    <div class="settings-grp" id="st-coach-grp" ${hasCoach() ? "" : "hidden"}>
+      <p class="eyebrow">Coach</p>
+      <button class="pick-open" id="cc-clear">
+        <span>Chatverlauf löschen</span><span class="pick-count" id="cc-count"></span></button>
+      <p class="hint">Der Coach startet danach wieder mit der Begrüßung.</p>
+    </div>
+
     <div class="settings-grp">
       <p class="eyebrow">Körperdaten</p>
       <div class="row">
@@ -1414,6 +1541,7 @@ function openSettings(){
     $$(".tile", box).forEach(t => t.onclick = () => {
       draft[key] = t.dataset.id;
       $$(".tile", box).forEach(x => x.classList.toggle("sel", x === t));
+      if (key === "tier") $("#st-coach-grp").hidden = !["premium","ultra"].includes(draft.tier);
     });
   });
 
@@ -1562,6 +1690,33 @@ function openSettings(){
     }
     renderHome(); closeSheet(); toast("Einstellungen gespeichert");
   };
+  /* Chatverlauf zurücksetzen. Zweistufig, weil er nicht wiederherstellbar ist. */
+  const countMsgs = () => Math.max(0, (S.chat || []).filter(m => m.role === "user").length);
+  $("#cc-count").textContent = countMsgs() ? `${countMsgs()} Fragen` : "leer";
+  let armed = false;
+  $("#cc-clear").onclick = async () => {
+    if (!armed){
+      armed = true;
+      $("#cc-clear").querySelector("span").textContent = "Wirklich löschen?";
+      $("#cc-count").textContent = "tippen zum Bestätigen";
+      setTimeout(() => {
+        if (!armed) return;
+        armed = false;
+        const b = $("#cc-clear");
+        if (!b) return;
+        b.querySelector("span").textContent = "Chatverlauf löschen";
+        $("#cc-count").textContent = countMsgs() ? `${countMsgs()} Fragen` : "leer";
+      }, 4000);
+      return;
+    }
+    armed = false;
+    S.chat = [{ role:"assistant", content: GREETING, t: clock() }];
+    await saveChat();
+    $("#cc-clear").querySelector("span").textContent = "Chatverlauf löschen";
+    $("#cc-count").textContent = "leer";
+    toast("Chatverlauf gelöscht");
+  };
+
   $("#st-out").onclick = () => { closeSheet(); signOut(auth); };
 }
 
