@@ -668,7 +668,8 @@ $("#ob-back").onclick = () => { if (S.obStep){ S.obStep--; renderOb(); } };
 const TIER_MARK = {
   basis:   `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="4"/></svg>`,
   premium: `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0l1.5 4.5L12 6l-4.5 1.5L6 12l-1.5-4.5L0 6l4.5-1.5z"/></svg>`,
-  ultra:   `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0l6 6-6 6-6-6z"/></svg>`
+  // 16 Zacken, Sonnenstern — die Steigerung zum vierzackigen Funken bei Premium
+  ultra:   `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0.1L6.6 3.01L8.26 0.55L7.69 3.46L10.17 1.83L8.54 4.31L11.45 3.74L8.99 5.4L11.9 6L8.99 6.6L11.45 8.26L8.54 7.69L10.17 10.17L7.69 8.54L8.26 11.45L6.6 8.99L6 11.9L5.4 8.99L3.74 11.45L4.31 8.54L1.83 10.17L3.46 7.69L0.55 8.26L3.01 6.6L0.1 6L3.01 5.4L0.55 3.74L3.46 4.31L1.83 1.83L4.31 3.46L3.74 0.55L5.4 3.01Z"/></svg>`
 };
 
 const CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
