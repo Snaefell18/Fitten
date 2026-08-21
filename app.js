@@ -212,7 +212,7 @@ function toast(msg){
 }
 
 const ICON = {
-  check:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
   fork :`<svg viewBox="0 0 24 24" fill="none" stroke="#1D6EF5" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v7a3 3 0 0 0 6 0V2M8 9v13M18 2c-1.5 2-2 4-2 7v4h4V9c0-3-.5-5-2-7zM18 13v9"/></svg>`,
   bolt :`<svg viewBox="0 0 24 24" fill="none" stroke="#0E9F63" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg>`,
   trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>`,
@@ -264,9 +264,9 @@ const PROTEIN_PER_KG = { bulk:2.0, keep:1.8, cut1:2.0, cut2:2.2 };
    greifen für Bildanalyse und Vorschläge auf stärkere Modelle zu.
    Welches Modell dahintersteckt, entscheidet der Server. */
 const TIERS = [
-  { id:"basis",   n:"Basis",   s:"Schnell und sparsam" },
-  { id:"premium", n:"Premium", s:"Genauere Schätzungen und Vorschläge" },
-  { id:"ultra",   n:"Ultra+",  s:"Bestmögliche Qualität, etwas langsamer" }
+  { id:"basis",   n:"Basis",   s:"Tracken, ganz einfach" },
+  { id:"premium", n:"Premium", s:"Präziser. Klüger. Schneller." },
+  { id:"ultra",   n:"Ultra+",  s:"Alles auf Maximum." }
 ];
 
 const MACROS = [
@@ -1272,6 +1272,13 @@ function openSettings(){
 
   openSheet("Einstellungen", `
     <div class="settings-grp">
+      <p class="eyebrow">Mitgliedschaft</p>
+      <div class="tiles tiers" data-set="tier">
+        ${TIERS.map(t => tileHTML(t.id, t.n, t.s, "", draft.tier === t.id)).join("")}
+      </div>
+    </div>
+
+    <div class="settings-grp">
       <p class="eyebrow">Körperdaten</p>
       <div class="row">
         <div class="field"><label for="st-w">Gewicht (kg)</label>
@@ -1359,13 +1366,6 @@ function openSettings(){
       <p class="hint">Wird bei Vorschlägen berücksichtigt.</p>
     </div>
 
-    <div class="settings-grp">
-      <p class="eyebrow">KI-Qualität</p>
-      <div class="tiles" data-set="tier">
-        ${TIERS.map(t => tileHTML(t.id, t.n, t.s, "", draft.tier === t.id)).join("")}
-      </div>
-      <p class="hint">Gilt für Fotoanalyse und Essensvorschläge.</p>
-    </div>
   `, `<button class="btn btn-primary" id="st-save">Speichern</button>
       <button class="btn btn-ghost" id="st-out" style="color:var(--ink-3)">Abmelden</button>`);
 
