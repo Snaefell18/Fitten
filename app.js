@@ -1297,9 +1297,10 @@ function openSettings(){
 
     <div class="settings-grp">
       <p class="eyebrow">Alltag</p>
-      <div class="tiles" data-set="lifestyle">
-        ${LIFESTYLE.map(l => tileHTML(l.id, l.n, l.s, "", draft.lifestyle===l.id)).join("")}
-      </div>
+      <select id="st-life">
+        ${LIFESTYLE.map(l => `<option value="${l.id}" ${draft.lifestyle===l.id?"selected":""}>${l.n}</option>`).join("")}
+      </select>
+      <p class="hint" id="st-life-h"></p>
       <div class="field" id="st-lsk" style="margin-top:12px" ${draft.lifestyle==="manual"?"":"hidden"}>
         <label for="st-lskv">Zuschlag zum Grundumsatz (kcal)</label>
         <input id="st-lskv" type="number" inputmode="numeric" value="${draft.lifestyleKcal ?? DEF_LS_KCAL}">
@@ -1308,9 +1309,10 @@ function openSettings(){
 
     <div class="settings-grp">
       <p class="eyebrow">Ziel</p>
-      <div class="tiles" data-set="goal">
-        ${GOALS.map(g => tileHTML(g.id, g.n, g.s, "", draft.goal===g.id)).join("")}
-      </div>
+      <select id="st-goal">
+        ${GOALS.map(g => `<option value="${g.id}" ${draft.goal===g.id?"selected":""}>${g.n}</option>`).join("")}
+      </select>
+      <p class="hint" id="st-goal-h"></p>
       <div class="field" id="st-gk" style="margin-top:12px" ${draft.goal==="manual"?"":"hidden"}>
         <label for="st-gkv">Abweichung vom Grundbedarf (kcal)</label>
         <input id="st-gkv" type="number" inputmode="numeric" value="${draft.goalKcal ?? DEF_GOAL_KCAL}">
@@ -1329,9 +1331,10 @@ function openSettings(){
 
     <div class="settings-grp">
       <p class="eyebrow">Ernährungsform</p>
-      <div class="tiles" data-set="diet">
-        ${DIETS.map(d => tileHTML(d.id, d.n, d.s, "", draft.diet === d.id)).join("")}
-      </div>
+      <select id="st-diet">
+        ${DIETS.map(d => `<option value="${d.id}" ${draft.diet===d.id?"selected":""}>${d.n}</option>`).join("")}
+      </select>
+      <p class="hint" id="st-diet-h"></p>
     </div>
 
     <div class="settings-grp">
@@ -1379,6 +1382,9 @@ function openSettings(){
     draft.goalKcal      = Math.round(+$("#st-gkv").value  || 0);
     $("#st-lsk").hidden = draft.lifestyle !== "manual";
     $("#st-gk").hidden  = draft.goal      !== "manual";
+    // Beschreibung der gewählten Option unter die Liste schreiben
+    $("#st-life-h").textContent = (LIFESTYLE.find(l => l.id === draft.lifestyle) || {}).s || "";
+    $("#st-goal-h").textContent = (GOALS.find(g => g.id === draft.goal) || {}).s || "";
     $("#st-preview").innerHTML =
       `Neues Tagesbudget: <b>${num(targetOf(draft))} kcal</b> · Grundbedarf ${num(tdeeOf(draft))} kcal`
       + (targetFloored(draft)
@@ -1389,15 +1395,23 @@ function openSettings(){
   ["#st-w","#st-h","#st-a","#st-s","#st-lskv","#st-gkv"].forEach(x => $(x).oninput = preview);
 
   /* ── Kachelgruppen ── */
+  // Mitgliedschaft bleibt als Kacheln — dort trägt die Optik die Aussage
   $$("#sheet-body .tiles").forEach(box => {
     const key = box.dataset.set;
     $$(".tile", box).forEach(t => t.onclick = () => {
       draft[key] = t.dataset.id;
       $$(".tile", box).forEach(x => x.classList.toggle("sel", x === t));
-      if (key === "diet") repaintPickers();
-      else if (key !== "tier") preview();
     });
   });
+
+  $("#st-life").onchange = () => { draft.lifestyle = $("#st-life").value; preview(); };
+  $("#st-goal").onchange = () => { draft.goal      = $("#st-goal").value; preview(); };
+  $("#st-diet").onchange = () => {
+    draft.diet = $("#st-diet").value;
+    $("#st-diet-h").textContent = (DIETS.find(d => d.id === draft.diet) || {}).s || "";
+    repaintPickers();
+  };
+  $("#st-diet-h").textContent = (DIETS.find(d => d.id === draft.diet) || {}).s || "";
 
   /* ── Auswahl-Blöcke: Gewähltes oben, Gesamtliste aufklappbar ──────────
      Der Zustand "offen" bleibt beim Neuzeichnen erhalten, sonst würde die
