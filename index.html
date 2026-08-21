@@ -295,6 +295,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   transition:transform .15s}
 .tier:active{transform:scale(.94)}
 .tier svg{width:11px; height:11px; flex:none}
+/* Der Zackenstern braucht etwas mehr Fläche, damit die Strahlen tragen */
+.tier.ultra svg{width:13px; height:13px; margin:-1px 0}
 
 .tier.basis{background:var(--glass-strong); border:1px solid var(--glass-line);
   color:var(--ink-2); box-shadow:var(--shadow-s);
