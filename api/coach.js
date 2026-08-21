@@ -79,6 +79,14 @@ Nennst du konkrete Mengen, gib Gramm oder Stück an und schätze die Kalorien
 realistisch. Passe Vorschläge immer an das an, was heute noch übrig ist.`;
 }
 
+/* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt
+   Denken UND Antwort zusammen. Ohne Abschalten bleibt bei knappem Budget
+   kein Platz für den eigentlichen Text. Haiku 4.5 kennt den Schalter nicht,
+   deshalb nur für die neueren Modelle setzen. */
+function thinkingOff(model){
+  return /^claude-(sonnet|opus)-5/.test(model) ? { thinking: { type: "disabled" } } : {};
+}
+
 export const config = { maxDuration: 60 };
 
 export default async function handler(req, res){
@@ -153,7 +161,8 @@ export default async function handler(req, res){
         },
         body: JSON.stringify({
           model: modelFor(tier),
-          max_tokens: 900,
+          ...thinkingOff(modelFor(tier)),
+          max_tokens: 1400,
           system: buildSystem(body.context || {}),
           messages
         })
@@ -189,10 +198,16 @@ export default async function handler(req, res){
       .filter(b => b.type === "text").map(b => b.text).join("").trim();
 
     if (!reply){
+      // Blocktypen mitgeben — daran erkennt man sofort, ob nur gedacht wurde
+      const kinds = (raw.content || []).map(b => b.type).join(", ") || "keine";
       return res.status(502).json({
         error: "empty_reply",
+        model: modelFor(tier),
         stop_reason: raw.stop_reason || null,
-        message: "Der Coach hat keine Antwort zurückgegeben."
+        blocks: kinds,
+        message: raw.stop_reason === "max_tokens"
+          ? `Die Antwort wurde abgeschnitten (Blöcke: ${kinds}). Token-Limit erhöhen.`
+          : `Der Coach hat keinen Text geliefert (Blöcke: ${kinds}, Grund: ${raw.stop_reason || "unbekannt"}).`
       });
     }
 
