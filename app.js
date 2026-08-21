@@ -664,6 +664,13 @@ $("#ob-back").onclick = () => { if (S.obStep){ S.obStep--; renderOb(); } };
 
 /* ─────────────────  9. HOME  ───────────────── */
 
+/* Je Stufe ein eigenes Zeichen: schlichter Ring, Funke, Rhombus. */
+const TIER_MARK = {
+  basis:   `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="4"/></svg>`,
+  premium: `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0l1.5 4.5L12 6l-4.5 1.5L6 12l-1.5-4.5L0 6l4.5-1.5z"/></svg>`,
+  ultra:   `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0l6 6-6 6-6-6z"/></svg>`
+};
+
 const CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
 function renderHome(){
@@ -674,6 +681,10 @@ function renderHome(){
   $("#h-date").innerHTML = new Date(dy, dm-1, dd)
     .toLocaleDateString("de-DE", { weekday:"long", day:"numeric", month:"long" }) + CHEVRON;
   $("#h-date").classList.toggle("past", !today);
+
+  const tier = TIERS.find(t => t.id === (S.profile.tier || "basis")) || TIERS[0];
+  $("#h-tier").className = "tier " + tier.id;
+  $("#h-tier").innerHTML = TIER_MARK[tier.id] + tier.n;
 
   // Auf vergangenen Tagen wird nichts erfasst — sonst landet der Eintrag
   // unbemerkt beim heutigen Datum.
@@ -1246,6 +1257,7 @@ function openDuration(a){
 /* ─────────────────  14. EINSTELLUNGEN  ───────────────── */
 
 $("#h-settings").onclick = () => openSettings();
+$("#h-tier").onclick     = () => openSettings();   // Abzeichen führt direkt zur Stufe
 
 function openSettings(){
   // Nach dem Anlegen eines eigenen Lebensmittels wird der Zwischenstand
