@@ -611,6 +611,28 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .chat-send:disabled{opacity:.4; pointer-events:none}
 .chat-send svg{width:20px; height:20px}
 
+/* Rechtstexte */
+.legal{font-size:15px; line-height:1.55; color:var(--ink-2)}
+.legal h4{font-size:14px; font-weight:750; color:var(--ink); margin:20px 0 6px; letter-spacing:-.01em}
+.legal h4:first-child{margin-top:0}
+.legal p{margin:0 0 10px}
+.legal .todo{background:#FFF4CE; border:1px solid #F5D67B; border-radius:10px;
+  padding:10px 12px; font-size:13.5px; color:#7A5A00; font-weight:600}
+.legal a{color:var(--blue-600)}
+
+/* Einwilligung im Onboarding */
+.consent{display:flex; align-items:flex-start; gap:12px; width:100%; text-align:left;
+  padding:15px 16px; border-radius:var(--r-md); background:var(--glass);
+  border:1.5px solid rgba(255,255,255,.85); box-shadow:var(--shadow-s); margin-top:16px}
+.consent.sel{border-color:var(--blue-600); background:rgba(255,255,255,.9)}
+.consent .check{margin-top:1px; border-radius:8px}
+.consent.sel .check{background:var(--blue-600); border-color:var(--blue-600)}
+.consent span.tx{flex:1; font-size:13.5px; line-height:1.45; color:var(--ink-2); font-weight:550}
+
+/* Hinweiszeile über dem Coach-Chat */
+.chat-note{font-size:12.5px; line-height:1.4; color:var(--ink-3); font-weight:600;
+  text-align:center; padding:2px 8px 10px}
+
 .toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 26px); transform:translate(-50%,20px);
   z-index:90; padding:13px 22px; border-radius:99px; background:rgba(16,24,40,.94); color:#fff;
   font-size:14.5px; font-weight:620; box-shadow:var(--shadow-l); opacity:0; pointer-events:none;
