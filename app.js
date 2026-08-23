@@ -2043,57 +2043,75 @@ function openSettingsKeep(draft){
 }
 
 /* ─────────────────  16. RECHTLICHES  ─────────────────
-   Die mit «» markierten Stellen musst du vor der Veröffentlichung selbst
-   ausfüllen. Der Rest ist ein Gerüst, kein anwaltlich geprüfter Text. */
+   Inhalte auf dem Stand vom 23. August 2026. Bei Umzug, Wechsel der
+   Rechtsform, neuen Dienstleistern oder Ende der Kleinunternehmerregelung
+   müssen Impressum und Datenschutz angepasst werden — dann auch
+   LEGAL_UPDATED hochsetzen. Nicht anwaltlich geprüft. */
 
-const LEGAL_UPDATED = "«Datum der letzten Änderung»";
+const LEGAL_UPDATED = "23. August 2026";
 
 const LEGAL = {
   imprint: { t:"Impressum", body:`
-<p class="todo">Vor Veröffentlichung ausfüllen. Anschrift muss ladungsfähig sein, ein Postfach genügt nicht.</p>
 <h4>Angaben gemäß § 5 DDG</h4>
-<p>«Vor- und Nachname»<br>«Straße und Hausnummer»<br>«PLZ und Ort»<br>Deutschland</p>
+<p>Jan-Niklas Rentzsch<br>Bahndamm 7<br>23617 Stockelsdorf<br>Deutschland</p>
 <h4>Kontakt</h4>
-<p>E-Mail: «kontakt@deine-domain.de»<br>Telefon: «Telefonnummer»</p>
+<p>E-Mail: info@laerby.com<br>Telefon: 0151 25380111</p>
 <h4>Umsatzsteuer</h4>
-<p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a UStG: «DE…»<br>
-Alternativ, falls Kleinunternehmer: Gemäß § 19 UStG wird keine Umsatzsteuer erhoben.</p>
+<p>Gemäß § 19 UStG wird keine Umsatzsteuer berechnet, da Kleinunternehmerregelung.</p>
 <h4>Verantwortlich für den Inhalt</h4>
-<p>«Vor- und Nachname», Anschrift wie oben.</p>
+<p>Jan-Niklas Rentzsch, Anschrift wie oben.</p>
 <h4>Streitbeilegung</h4>
 <p>Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer
-Verbraucherschlichtungsstelle teilzunehmen.</p>` },
+Verbraucherschlichtungsstelle teilzunehmen.</p>
+<h4>Stand</h4>
+<p>${LEGAL_UPDATED}</p>` },
 
   privacy: { t:"Datenschutz", body:`
-<p class="todo">Gerüst mit den tatsächlich eingesetzten Diensten. Vor Veröffentlichung juristisch prüfen lassen.</p>
 <h4>Verantwortlicher</h4>
-<p>«Vor- und Nachname», «Anschrift», «E-Mail».</p>
+<p>Jan-Niklas Rentzsch<br>Bahndamm 7<br>23617 Stockelsdorf<br>Deutschland<br>
+E-Mail: info@laerby.com<br>Telefon: 0151 25380111</p>
 <h4>Welche Daten wir verarbeiten</h4>
 <p>Zugangsdaten: E-Mail-Adresse und Kennung deines Kontos.<br>
 Gesundheitsbezogene Daten: Gewicht, Größe, Alter, Geschlecht, Ziele, erfasste Mahlzeiten
 und Trainings, Fotos von Mahlzeiten, Angaben zu Vorlieben und Unverträglichkeiten.<br>
 Nutzungsdaten: Zeitpunkte deiner Einträge, Verlauf des Coach-Chats.</p>
+<h4>Zwecke</h4>
+<p>Die Daten dienen ausschließlich dazu, dir die Funktionen der App bereitzustellen:
+Berechnung von Grundumsatz, Tagesbudget und Makrozielen, Auswertung deiner Einträge,
+Schätzung von Kalorien aus Fotos und Beschreibungen sowie die Antworten des Coaches.
+Eine Auswertung zu Werbezwecken findet nicht statt, ebenso wenig eine Weitergabe an Dritte
+zu deren eigenen Zwecken.</p>
 <h4>Rechtsgrundlage</h4>
 <p>Gesundheitsbezogene Daten sind besondere Kategorien personenbezogener Daten nach
 Art. 9 DSGVO. Wir verarbeiten sie ausschließlich auf Grundlage deiner ausdrücklichen
 Einwilligung nach Art. 9 Abs. 2 lit. a DSGVO, die du beim Einrichten erteilt hast und
-jederzeit widerrufen kannst. Die Vertragserfüllung stützt sich auf Art. 6 Abs. 1 lit. b DSGVO.</p>
+jederzeit mit Wirkung für die Zukunft widerrufen kannst. Die Bereitstellung der App im
+Übrigen stützt sich auf Art. 6 Abs. 1 lit. b DSGVO.</p>
 <h4>Empfänger</h4>
-<p>Google Ireland Limited beziehungsweise Google LLC für Anmeldung und Datenbank (Firebase).<br>
-Vercel Inc., USA, für den Betrieb der Anwendung.<br>
-Anthropic PBC, USA, für die Analyse von Mahlzeitenfotos, die Essensvorschläge und den Coach.</p>
+<p>Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland, sowie Google LLC,
+USA, für Anmeldung und Datenbank (Firebase Authentication und Cloud Firestore).<br>
+Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, USA, für den Betrieb der Anwendung.<br>
+Anthropic PBC, 548 Market St, PMB 90375, San Francisco, CA 94104, USA, für die Analyse von
+Mahlzeitenfotos, die Essensvorschläge und den Coach.</p>
+<p>Mit allen genannten Anbietern bestehen Verträge zur Auftragsverarbeitung nach Art. 28 DSGVO.</p>
 <h4>Übermittlung in Drittländer</h4>
-<p>Bei den genannten Diensten werden Daten in den USA verarbeitet. Grundlage sind die
-Standardvertragsklauseln der EU-Kommission sowie, soweit einschlägig, das EU-US Data
-Privacy Framework.</p>
+<p>Bei den genannten Diensten werden Daten in den Vereinigten Staaten verarbeitet. Grundlage
+sind die Standardvertragsklauseln der EU-Kommission sowie, soweit der jeweilige Anbieter
+zertifiziert ist, das EU-US Data Privacy Framework.</p>
 <h4>Speicherdauer</h4>
-<p>Deine Daten bleiben gespeichert, solange dein Konto besteht. Löschst du dein Konto,
-werden sie entfernt. Den Coach-Verlauf kannst du jederzeit in den Einstellungen löschen.</p>
+<p>Deine Daten bleiben gespeichert, solange dein Konto besteht. Löschst du dein Konto in den
+Einstellungen, werden Profil, alle erfassten Tage und der Coach-Verlauf entfernt. Den
+Coach-Verlauf kannst du davon unabhängig jederzeit einzeln löschen.</p>
 <h4>Deine Rechte</h4>
-<p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
-Datenübertragbarkeit und Widerspruch. Eine erteilte Einwilligung kannst du jederzeit mit
-Wirkung für die Zukunft widerrufen. Außerdem steht dir ein Beschwerderecht bei einer
-Aufsichtsbehörde zu, für «Bundesland» ist das «zuständige Aufsichtsbehörde».</p>
+<p>Du hast das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17),
+Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch
+(Art. 21 DSGVO). Eine erteilte Einwilligung kannst du jederzeit widerrufen, ohne dass die
+Rechtmäßigkeit der bis dahin erfolgten Verarbeitung berührt wird. Wende dich dafür an die
+oben genannte E-Mail-Adresse.</p>
+<h4>Beschwerderecht</h4>
+<p>Dir steht ein Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde zu. Zuständig ist
+das Unabhängige Landeszentrum für Datenschutz Schleswig-Holstein, Holstenstraße 98,
+24103 Kiel.</p>
 <h4>Stand</h4>
 <p>${LEGAL_UPDATED}</p>` },
 
