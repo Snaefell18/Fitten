@@ -423,7 +423,9 @@ async function listDays(){
 }
 async function saveDay(){
   // Momentaufnahme des Ziels, damit der Tag später eigenständig auswertbar ist
-  if (viewingToday()){
+  // Heute immer aktualisieren; für vergangene Tage nur ergänzen, falls noch
+  // kein Ziel hinterlegt ist — sonst würde die alte Bilanz überschrieben.
+  if (viewingToday() || S.day.target == null){
     S.day.target = targetOf(S.profile);
     S.day.tdee   = tdeeOf(S.profile);
     S.day.macros = macroTargets(S.profile);
@@ -431,7 +433,7 @@ async function saveDay(){
   await setDoc(doc(db, "users", S.uid, "days", S.dayKey), S.day);
 }
 async function addEntry(kind, entry){
-  if (S.dayKey !== todayKey()) await loadDay();
+  // Kein Sprung mehr auf heute: der Eintrag gehört in den angezeigten Tag
   S.day[kind].unshift({ ...entry, id: crypto.randomUUID(), t: clock() });
   renderHome();
   try { await saveDay(); } catch { toast("Offline gespeichert – Sync folgt."); }
@@ -691,11 +693,10 @@ function renderHome(){
 
   // Auf vergangenen Tagen wird nichts erfasst — sonst landet der Eintrag
   // unbemerkt beim heutigen Datum.
-  $("#a-photo").hidden = !today;
-  $("#a-row").hidden   = !today;
-  // Ein Vorschlag ergibt nur für den laufenden Tag Sinn
+  // Erfasst wird immer in den gerade angezeigten Tag — auch rückwirkend.
+  // Nur der Vorschlag bleibt dem laufenden Tag vorbehalten.
   $("#h-sug-page").hidden = !today;
-  $$("#h-dots i")[2].hidden = !today;
+  $$("#h-dots i")[1].hidden = !today;
 
   const over = t.left < 0;
   $("#h-left").textContent = num(Math.abs(t.left));
@@ -707,11 +708,9 @@ function renderHome(){
   rail.style.width = pct + "%";
   rail.classList.toggle("over", over);
 
-  $("#h-eaten").textContent  = `${num(t.eaten)} gegessen`;
+  $("#h-eaten").textContent  = `${num(t.eaten)} gegessen`
+    + (t.moved ? ` · +${num(t.moved)} Bewegung` : "");
   $("#h-budget").textContent = `${num(t.budget)} Budget`;
-  $("#h-tdee").textContent   = num(t.tdee);
-  $("#h-moved").textContent  = "+" + num(t.moved);
-  $("#h-eaten2").textContent = num(t.eaten);
 
   $("#h-macros").innerHTML = MACROS.map(x => {
     const have = t.got[x.key], goal = t.macros[x.key] || 0;
@@ -727,20 +726,19 @@ function renderHome(){
   ].sort((a,b) => b.t.localeCompare(a.t));
 
   $("#h-log").innerHTML = `
-    <div class="log-head"><span class="eyebrow">Heute erfasst</span>
+    <div class="log-head"><span class="eyebrow">${today ? "Heute erfasst" : "Erfasst"}</span>
       <span class="eyebrow">${entries.length || ""}</span></div>
     ${entries.length ? entries.map(e => {
       const mv = e.kind === "workouts";
-      return `<div class="item">
+      return `<div class="item" data-kind="${e.kind}" data-id="${e.id}">
         <span class="ic ${mv?"mv":""}">${mv?ICON.bolt:ICON.fork}</span>
         <span class="t-txt"><span class="t-ttl">${esc(e.name)}</span>
           <span class="t-sub">${esc(e.detail || "")} · ${e.t}</span></span>
         <span class="kc ${mv?"mv":""}">${mv?"+":""}${num(e.kcal)}</span>
-        <button class="del" data-kind="${e.kind}" data-id="${e.id}" aria-label="Eintrag löschen">${ICON.trash}</button>
       </div>`;
     }).join("") : `<p class="log-empty">Noch nichts erfasst. Fang mit einer Mahlzeit oder einem Training an.</p>`}`;
 
-  $$("#h-log .del").forEach(b => b.onclick = () => delEntry(b.dataset.kind, b.dataset.id));
+  $$("#h-log .item").forEach(bindHold);
 }
 
 /* Punktanzeige des Kachel-Decks. Bei zwei Seiten reicht das Verhältnis von
@@ -1016,6 +1014,96 @@ async function openDays(){
   }
 
   paint();
+}
+
+/* ── Eintrag bearbeiten: langes Drücken öffnet das Menü ────────────────
+   Kein Kontextmenü des Systems, und ein Fingerwisch bricht ab, damit
+   Scrollen nicht versehentlich auslöst. */
+function bindHold(el){
+  let timer = null, sx = 0, sy = 0;
+  const clear = () => { clearTimeout(timer); timer = null; el.classList.remove("held"); };
+
+  el.oncontextmenu = e => e.preventDefault();
+  el.onpointerdown = e => {
+    sx = e.clientX; sy = e.clientY;
+    el.classList.add("held");
+    timer = setTimeout(() => {
+      clear();
+      if (navigator.vibrate) navigator.vibrate(12);
+      openEntryMenu(el.dataset.kind, el.dataset.id);
+    }, 480);
+  };
+  el.onpointermove = e => {
+    if (timer && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) clear();
+  };
+  el.onpointerup = clear;
+  el.onpointercancel = clear;
+  el.onpointerleave = clear;
+}
+
+function openEntryMenu(kind, id){
+  const e = (S.day[kind] || []).find(x => x.id === id);
+  if (!e) return;
+  const mv = kind === "workouts";
+
+  openSheet(e.name, `
+    <div class="item" style="pointer-events:none; margin-bottom:4px">
+      <span class="ic ${mv?"mv":""}">${mv?ICON.bolt:ICON.fork}</span>
+      <span class="t-txt"><span class="t-ttl">${esc(e.name)}</span>
+        <span class="t-sub">${esc(e.detail || "")} · ${e.t}</span></span>
+      <span class="kc ${mv?"mv":""}">${mv?"+":""}${num(e.kcal)}</span>
+    </div>`,
+    `<button class="btn btn-primary" id="en-edit">Bearbeiten</button>
+     <button class="btn btn-ghost" id="en-del" style="color:var(--bad)">Löschen</button>`);
+
+  $("#en-edit").onclick = () => openEntryEdit(kind, id);
+  $("#en-del").onclick  = async () => {
+    await delEntry(kind, id);
+    closeSheet();
+    toast("Eintrag gelöscht");
+  };
+}
+
+function openEntryEdit(kind, id){
+  const e = (S.day[kind] || []).find(x => x.id === id);
+  if (!e) return;
+  const mv = kind === "workouts";
+
+  openSheet("Bearbeiten", `
+    <div class="field"><label for="ee-n">Bezeichnung</label>
+      <input id="ee-n" type="text" value="${esc(e.name)}"></div>
+    <div class="row">
+      <div class="field"><label for="ee-k">${mv ? "Verbrannte Kalorien" : "Kalorien"}</label>
+        <input id="ee-k" type="number" inputmode="numeric" value="${Math.round(e.kcal)}"></div>
+      <div class="field"><label for="ee-t">Uhrzeit</label>
+        <input id="ee-t" type="text" inputmode="numeric" value="${esc(e.t || "")}" placeholder="12:30"></div>
+    </div>
+    <div class="field"><label for="ee-d">Zusatz</label>
+      <input id="ee-d" type="text" value="${esc(e.detail || "")}" placeholder="z. B. 150 g"></div>
+    ${mv ? "" : `
+      <p class="group-label">Makros in Gramm</p>
+      <div class="row">${MACROS.map(x => `
+        <div class="field"><label for="ee-${x.key}">${x.n}</label>
+          <input id="ee-${x.key}" type="number" inputmode="decimal" value="${e[x.key] ?? 0}"></div>`).join("")}
+      </div>`}
+  `, `<button class="btn btn-primary" id="ee-save">Speichern</button>
+      <button class="btn btn-ghost" id="ee-back">Zurück</button>`);
+
+  $("#ee-save").onclick = async () => {
+    const kcal = +$("#ee-k").value;
+    if (!(kcal >= 0)) { toast("Bitte eine gültige Kalorienzahl eintragen."); return; }
+    e.name   = $("#ee-n").value.trim() || e.name;
+    e.detail = $("#ee-d").value.trim();
+    e.kcal   = Math.round(kcal);
+    const time = $("#ee-t").value.trim();
+    if (/^\d{1,2}:\d{2}$/.test(time)) e.t = time.padStart(5, "0");
+    if (!mv) MACROS.forEach(x => e[x.key] = Math.max(0, +$("#ee-" + x.key).value || 0));
+    renderHome();
+    try { await saveDay(); } catch { toast("Speichern fehlgeschlagen."); return; }
+    closeSheet();
+    toast("Eintrag aktualisiert");
+  };
+  $("#ee-back").onclick = () => openEntryMenu(kind, id);
 }
 
 /* ─────────────────  10. SHEET-SYSTEM  ───────────────── */
