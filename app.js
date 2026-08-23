@@ -153,10 +153,11 @@ const LIFESTYLE = [
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut
+  createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut,
+  deleteUser, reauthenticateWithCredential, reauthenticateWithPopup, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, collection, getDocs
+  getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 const fb    = initializeApp(FIREBASE_CONFIG);
@@ -390,7 +391,7 @@ onAuthStateChanged(auth, async user => {
     setTimeout(maybeRecap, 900);
     setTimeout(maybeShowInstall, 2600);
   } else {
-    S.draft = { sex:"m", lifestyle:"mid", goal:"cut1", diet:"all", activities:[], foods:[], excluded:[] };
+    S.draft = { sex:"m", lifestyle:"mid", goal:"cut1", diet:"all", consent:false, activities:[], foods:[], excluded:[] };
     S.obStep = 0;
     renderOb();
     screen("s-ob");
@@ -489,7 +490,16 @@ const OB = [
           <label for="f-lsk">Zuschlag zum Grundumsatz (kcal)</label>
           <input id="f-lsk" type="number" inputmode="numeric" value="${d.lifestyleKcal ?? DEF_LS_KCAL}">
         </div>
-        <p class="hint">Trainingseinheiten trägst du später separat ein – sie erhöhen dein Tagesbudget zusätzlich.</p>`;
+        <p class="hint">Trainingseinheiten trägst du später separat ein – sie erhöhen dein Tagesbudget zusätzlich.</p>
+
+        <button class="consent ${d.consent ? "sel" : ""}" id="f-consent">
+          <span class="check">${ICON.check}</span>
+          <span class="tx">Ich willige ein, dass FITTEN.ME meine Gesundheitsdaten – Körperdaten,
+          Ziele, Mahlzeiten und Trainings – zur Berechnung meiner Werte verarbeitet und dafür
+          an die genannten Dienstleister übermittelt. Die Einwilligung kann ich jederzeit
+          widerrufen. Einzelheiten stehen unter
+          <u style="text-decoration:underline" id="f-privacy">Datenschutz</u>.</span>
+        </button>`;
     },
     bind(){
       $$("#ob-body .tile").forEach(t => t.onclick = () => {
@@ -497,12 +507,22 @@ const OB = [
         $$("#ob-body .tile").forEach(x => x.classList.toggle("sel", x === t));
         $("#ob-lsk").hidden = S.draft.lifestyle !== "manual";
       });
+      $("#f-consent").onclick = e => {
+        if (e.target.id === "f-privacy"){       // Text antippen öffnet die Erklärung
+          openLegal("privacy");
+          $("#lg-back").onclick = closeSheet;   // zurück ins Onboarding, nicht in die Einstellungen
+          return;
+        }
+        S.draft.consent = !S.draft.consent;
+        $("#f-consent").classList.toggle("sel", S.draft.consent);
+      };
     },
     read(){
       const w = +$("#f-w").value, h = +$("#f-h").value, a = +$("#f-a").value;
       if (!(w >= 30 && w <= 300)) return "Bitte ein Gewicht zwischen 30 und 300 kg eintragen.";
       if (!(h >= 120 && h <= 230)) return "Bitte eine Größe zwischen 120 und 230 cm eintragen.";
       if (!(a >= 14 && a <= 100))  return "Bitte ein Alter zwischen 14 und 100 Jahren eintragen.";
+      if (!S.draft.consent) return "Bitte bestätige die Einwilligung zur Verarbeitung deiner Gesundheitsdaten.";
       Object.assign(S.draft, { weight:w, height:h, age:a, sex:$("#f-s").value });
       if (S.draft.lifestyle === "manual"){
         const k = +$("#f-lsk").value;
@@ -664,7 +684,8 @@ $("#ob-next").onclick = async () => {
   if (S.obStep < OB.length-1){ S.obStep++; renderOb(); return; }
 
   $("#ob-next").disabled = true;
-  S.profile = { ...S.draft, onboarded:true, createdAt: Date.now() };
+  // Nachweis der Einwilligung nach Art. 7 Abs. 1 DSGVO
+  S.profile = { ...S.draft, onboarded:true, createdAt: Date.now(), consentAt: Date.now() };
   try {
     await saveProfile();
     await loadDay();
@@ -985,7 +1006,10 @@ async function openCoach(){
 function paintChat(typing = false, error = null){
   const body = $("#sheet-body");
   if (!body) return;
-  body.innerHTML = `<div class="chat">
+  body.innerHTML = `
+  <p class="chat-note">Dein Coach ist eine KI. Antworten können Fehler enthalten und
+  ersetzen keine ärztliche Beratung.</p>
+  <div class="chat">
     ${S.chat.map(m => `<div class="msg ${m.role === "user" ? "me" : "ai"}">${esc(m.content)}</div>`).join("")}
     ${typing ? `<div class="msg ai typing"><i></i><i></i><i></i></div>` : ""}
     ${error ? `<div class="msg err">${esc(error)}</div>` : ""}
@@ -1761,6 +1785,19 @@ function openSettings(){
       <p class="hint">Wird bei Vorschlägen berücksichtigt.</p>
     </div>
 
+
+    <div class="settings-grp">
+      <p class="eyebrow">Rechtliches</p>
+      ${Object.keys(LEGAL).map(k => `
+        <button class="pick-open" data-legal="${k}" style="margin-bottom:8px">
+          <span>${LEGAL[k].t}</span><span class="pick-count">${CHEV}</span></button>`).join("")}
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">Konto</p>
+      <button class="pick-open" id="st-del" style="color:var(--bad)">
+        <span>Konto und alle Daten löschen</span><span class="pick-count" style="color:var(--bad)">${CHEV}</span></button>
+    </div>
   `, `<button class="btn btn-primary" id="st-save">Speichern</button>
       <button class="btn btn-ghost" id="st-out" style="color:var(--ink-3)">Abmelden</button>`);
 
@@ -1992,6 +2029,9 @@ function openSettings(){
     toast("Chatverlauf gelöscht");
   };
 
+  $$("#sheet-body [data-legal]").forEach(b => b.onclick = () => openLegal(b.dataset.legal));
+  $("#st-del").onclick = () => openDeleteAccount();
+
   $("#st-out").onclick = () => { closeSheet(); signOut(auth); };
 }
 
@@ -2000,6 +2040,185 @@ let settingsResume = null;
 function openSettingsKeep(draft){
   settingsResume = draft;
   openSettings();
+}
+
+/* ─────────────────  16. RECHTLICHES  ─────────────────
+   Die mit «» markierten Stellen musst du vor der Veröffentlichung selbst
+   ausfüllen. Der Rest ist ein Gerüst, kein anwaltlich geprüfter Text. */
+
+const LEGAL_UPDATED = "«Datum der letzten Änderung»";
+
+const LEGAL = {
+  imprint: { t:"Impressum", body:`
+<p class="todo">Vor Veröffentlichung ausfüllen. Anschrift muss ladungsfähig sein, ein Postfach genügt nicht.</p>
+<h4>Angaben gemäß § 5 DDG</h4>
+<p>«Vor- und Nachname»<br>«Straße und Hausnummer»<br>«PLZ und Ort»<br>Deutschland</p>
+<h4>Kontakt</h4>
+<p>E-Mail: «kontakt@deine-domain.de»<br>Telefon: «Telefonnummer»</p>
+<h4>Umsatzsteuer</h4>
+<p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a UStG: «DE…»<br>
+Alternativ, falls Kleinunternehmer: Gemäß § 19 UStG wird keine Umsatzsteuer erhoben.</p>
+<h4>Verantwortlich für den Inhalt</h4>
+<p>«Vor- und Nachname», Anschrift wie oben.</p>
+<h4>Streitbeilegung</h4>
+<p>Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer
+Verbraucherschlichtungsstelle teilzunehmen.</p>` },
+
+  privacy: { t:"Datenschutz", body:`
+<p class="todo">Gerüst mit den tatsächlich eingesetzten Diensten. Vor Veröffentlichung juristisch prüfen lassen.</p>
+<h4>Verantwortlicher</h4>
+<p>«Vor- und Nachname», «Anschrift», «E-Mail».</p>
+<h4>Welche Daten wir verarbeiten</h4>
+<p>Zugangsdaten: E-Mail-Adresse und Kennung deines Kontos.<br>
+Gesundheitsbezogene Daten: Gewicht, Größe, Alter, Geschlecht, Ziele, erfasste Mahlzeiten
+und Trainings, Fotos von Mahlzeiten, Angaben zu Vorlieben und Unverträglichkeiten.<br>
+Nutzungsdaten: Zeitpunkte deiner Einträge, Verlauf des Coach-Chats.</p>
+<h4>Rechtsgrundlage</h4>
+<p>Gesundheitsbezogene Daten sind besondere Kategorien personenbezogener Daten nach
+Art. 9 DSGVO. Wir verarbeiten sie ausschließlich auf Grundlage deiner ausdrücklichen
+Einwilligung nach Art. 9 Abs. 2 lit. a DSGVO, die du beim Einrichten erteilt hast und
+jederzeit widerrufen kannst. Die Vertragserfüllung stützt sich auf Art. 6 Abs. 1 lit. b DSGVO.</p>
+<h4>Empfänger</h4>
+<p>Google Ireland Limited beziehungsweise Google LLC für Anmeldung und Datenbank (Firebase).<br>
+Vercel Inc., USA, für den Betrieb der Anwendung.<br>
+Anthropic PBC, USA, für die Analyse von Mahlzeitenfotos, die Essensvorschläge und den Coach.</p>
+<h4>Übermittlung in Drittländer</h4>
+<p>Bei den genannten Diensten werden Daten in den USA verarbeitet. Grundlage sind die
+Standardvertragsklauseln der EU-Kommission sowie, soweit einschlägig, das EU-US Data
+Privacy Framework.</p>
+<h4>Speicherdauer</h4>
+<p>Deine Daten bleiben gespeichert, solange dein Konto besteht. Löschst du dein Konto,
+werden sie entfernt. Den Coach-Verlauf kannst du jederzeit in den Einstellungen löschen.</p>
+<h4>Deine Rechte</h4>
+<p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
+Datenübertragbarkeit und Widerspruch. Eine erteilte Einwilligung kannst du jederzeit mit
+Wirkung für die Zukunft widerrufen. Außerdem steht dir ein Beschwerderecht bei einer
+Aufsichtsbehörde zu, für «Bundesland» ist das «zuständige Aufsichtsbehörde».</p>
+<h4>Stand</h4>
+<p>${LEGAL_UPDATED}</p>` },
+
+  health: { t:"Gesundheitshinweis", body:`
+<h4>Keine medizinische Beratung</h4>
+<p>FITTEN.ME ist eine App für Fitness und Wohlbefinden. Die angezeigten Kalorien- und
+Makroziele, die Auswertungen und die Antworten des Coaches sind allgemeine Orientierung
+und ersetzen weder ärztlichen Rat noch eine Diagnose oder Behandlung.</p>
+<h4>Schätzwerte</h4>
+<p>Der Grundumsatz wird nach der Formel von Mifflin und St Jeor berechnet. Sie liefert einen
+statistischen Durchschnitt, dein tatsächlicher Bedarf kann deutlich abweichen. Kalorien aus
+Fotos und Textbeschreibungen sind Schätzungen und können sich irren. Prüfe Werte, auf die
+es dir ankommt, selbst nach.</p>
+<h4>Wann du ärztlichen Rat einholen solltest</h4>
+<p>Sprich vor einer Ernährungsumstellung oder einem neuen Trainingsplan mit einer Ärztin oder
+einem Arzt, wenn du Vorerkrankungen hast, Medikamente nimmst, schwanger bist oder stillst,
+unter 18 Jahre alt bist oder gesundheitliche Beschwerden auftreten.</p>
+<h4>Wenn Essen belastend wird</h4>
+<p>Wenn dich das Zählen von Kalorien belastet oder dein Essverhalten dich beunruhigt, hol dir
+Unterstützung. Die Telefonberatung der Bundeszentrale für gesundheitliche Aufklärung zu
+Essstörungen ist unter 0221 892031 erreichbar.</p>` },
+
+  ai: { t:"KI-Hinweis", body:`
+<h4>Du sprichst mit einer KI</h4>
+<p>Der Coach, die Fotoanalyse und die Essensvorschläge werden von einem KI-Sprachmodell
+erzeugt. Es steht kein Mensch dahinter, der deine Nachrichten liest und beantwortet.</p>
+<h4>Welches System eingesetzt wird</h4>
+<p>Zum Einsatz kommen Modelle der Reihe Claude von Anthropic PBC. Welches Modell verwendet
+wird, hängt von deiner gewählten Mitgliedschaft ab.</p>
+<h4>Was dabei übermittelt wird</h4>
+<p>Für eine passende Antwort werden deine Angaben aus der App übermittelt: Körperdaten,
+Ziele, Tagesbudget, erfasste Mahlzeiten und Trainings, Vorlieben und Unverträglichkeiten.
+Bei der Fotoanalyse zusätzlich das aufgenommene Bild.</p>
+<h4>Grenzen</h4>
+<p>KI-Antworten können falsch oder unvollständig sein, auch wenn sie überzeugend klingen.
+Sie sind keine medizinische Beratung. Verlass dich bei gesundheitlich wichtigen
+Entscheidungen nicht allein darauf.</p>` }
+};
+
+/* Konto und sämtliche Daten entfernen. Erst Firestore, dann das Konto selbst —
+   nach dem Löschen des Kontos fehlt die Berechtigung für die Dokumente. */
+async function wipeAccount(){
+  const uid = S.uid;
+  const days = await getDocs(collection(db, "users", uid, "days"));
+  const jobs = [];
+  days.forEach(d => jobs.push(deleteDoc(doc(db, "users", uid, "days", d.id))));
+  jobs.push(deleteDoc(doc(db, "users", uid, "chat", "main")));
+  await Promise.all(jobs);
+  await deleteDoc(doc(db, "users", uid));
+  await deleteUser(auth.currentUser);
+}
+
+function openDeleteAccount(){
+  const user = auth.currentUser;
+  const viaGoogle = (user?.providerData || []).some(p => p.providerId === "google.com");
+  const WORD = "LÖSCHEN";
+
+  const form = (reauth) => `
+    <p class="legal" style="margin-bottom:14px">Damit werden dein Konto und alle
+    gespeicherten Daten endgültig entfernt: Körperdaten und Ziele, sämtliche erfassten
+    Mahlzeiten und Trainings, eigene Lebensmittel und Trainings sowie der Coach-Verlauf.
+    Das lässt sich nicht rückgängig machen.</p>
+
+    ${reauth ? `<p class="todo" style="margin-bottom:14px">Aus Sicherheitsgründen musst du
+      dich dafür erneut anmelden.</p>
+      ${viaGoogle
+        ? `<button class="btn btn-glass" id="da-google">Mit Google bestätigen</button>`
+        : `<div class="field"><label for="da-pass">Dein Passwort</label>
+             <input id="da-pass" type="password" autocomplete="current-password"></div>`}`
+    : ""}
+
+    <div class="field" style="margin-top:14px">
+      <label for="da-word">Tippe <b>${WORD}</b>, um zu bestätigen</label>
+      <input id="da-word" type="text" autocapitalize="characters" autocomplete="off" placeholder="${WORD}">
+    </div>
+    <p class="err" id="da-err"></p>`;
+
+  const paint = (reauth = false) => {
+    openSheet("Konto löschen", form(reauth),
+      `<button class="btn btn-primary" id="da-go" style="background:linear-gradient(180deg,#F87171,#DC2626);
+         box-shadow:0 12px 26px rgba(200,40,40,.28)" disabled>Endgültig löschen</button>
+       <button class="btn btn-ghost" id="da-back">Abbrechen</button>`);
+
+    $("#da-word").oninput = () =>
+      $("#da-go").disabled = $("#da-word").value.trim().toUpperCase() !== WORD;
+    $("#da-back").onclick = () => openSettings();
+
+    if (reauth && viaGoogle) $("#da-google").onclick = async () => {
+      try { await reauthenticateWithPopup(auth.currentUser, gprov); $("#da-err").textContent = ""; }
+      catch { $("#da-err").textContent = "Die Bestätigung hat nicht geklappt."; }
+    };
+
+    $("#da-go").onclick = async () => {
+      $("#da-go").disabled = true;
+      $("#da-err").textContent = "";
+      try {
+        if (reauth && !viaGoogle){
+          const pw = $("#da-pass").value;
+          if (!pw) throw { code:"no-pass" };
+          await reauthenticateWithCredential(auth.currentUser,
+            EmailAuthProvider.credential(auth.currentUser.email, pw));
+        }
+        await wipeAccount();
+        S.chat = null;
+        closeSheet();
+        toast("Konto gelöscht");
+      } catch (e) {
+        if (e?.code === "auth/requires-recent-login"){ paint(true); return; }
+        $("#da-err").textContent =
+          e?.code === "no-pass" ? "Bitte dein Passwort eingeben."
+          : e?.code === "auth/invalid-credential" || e?.code === "auth/wrong-password"
+            ? "Das Passwort stimmt nicht."
+            : "Löschen fehlgeschlagen. Versuch es später erneut.";
+        $("#da-go").disabled = false;
+      }
+    };
+  };
+  paint();
+}
+
+function openLegal(key){
+  const l = LEGAL[key];
+  openSheet(l.t, `<div class="legal">${l.body}</div>`,
+    `<button class="btn btn-glass" id="lg-back">Zurück</button>`);
+  $("#lg-back").onclick = () => openSettings();
 }
 
 /* Formular für ein eigenes Training */
