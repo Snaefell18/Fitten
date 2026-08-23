@@ -256,6 +256,12 @@ const targetFloored = p =>
   p.goal === "manual" && (tdeeOf(p) + (p.goalKcal ?? DEF_GOAL_KCAL)) < kcalFloor(p);
 const kcalPerHour = (met, kg) => Math.round(met * 1.05 * kg);
 
+/* Standardaktivitäten plus eigene. Bei eigenen gibt der Nutzer kcal/h direkt
+   an — die skalieren dann bewusst nicht mit dem Körpergewicht, weil der Wert
+   von ihm selbst kommt und nicht aus einem MET-Wert abgeleitet ist. */
+const allActs  = p => [...ACTIVITIES, ...(p.customActivities || [])];
+const kcalHour = (a, kg) => a.custom ? Math.round(a.kcalh) : kcalPerHour(a.met, kg);
+
 /* Makroziele. Automatik: Eiweiß nach Körpergewicht (im Defizit höher, um
    Muskulatur zu halten), Fett auf 27 % der Kalorien, Kohlenhydrate füllen
    den Rest auf. Wer will, setzt eigene Gramm-Werte. */
@@ -909,7 +915,7 @@ function coachContext(){
     dislikes:   foodNames(p.excluded || []),
     avoid:      p.customDislikes || [],
     customFoods:(p.customFoods || []).map(f => f.n),
-    activities: ACTIVITIES.filter(a => (p.activities||[]).includes(a.id)).map(a => a.n),
+    activities: allActs(p).filter(a => (p.activities||[]).includes(a.id)).map(a => a.n),
     time: clock()
   };
 }
@@ -1543,13 +1549,14 @@ $("#a-train").onclick = () => openTraining();
 
 function openTraining(){
   const kg   = S.profile.weight;
-  const favs = ACTIVITIES.filter(a => S.profile.activities.includes(a.id));
-  const rest = ACTIVITIES.filter(a => !S.profile.activities.includes(a.id));
+  const avail = allActs(S.profile);
+  const favs  = avail.filter(a => S.profile.activities.includes(a.id));
+  const rest  = avail.filter(a => !S.profile.activities.includes(a.id));
   const list = arr => arr.map(a =>
     `<button class="qitem" data-id="${a.id}">
        <span class="t-txt"><span class="t-ttl">${esc(a.n)}</span>
-         <span class="t-sub">${kcalPerHour(a.met,kg)} kcal pro Stunde</span></span>
-       <span class="t-val">${Math.round(kcalPerHour(a.met,kg)/2)} kcal<br><span style="font-weight:600;color:var(--ink-3);font-size:12px">30 min</span></span>
+         <span class="t-sub">${kcalHour(a,kg)} kcal pro Stunde</span></span>
+       <span class="t-val">${Math.round(kcalHour(a,kg)/2)} kcal<br><span style="font-weight:600;color:var(--ink-3);font-size:12px">30 min</span></span>
      </button>`).join("");
 
   openSheet("Training erfassen", `
@@ -1582,11 +1589,11 @@ function openTraining(){
   };
 
   $$("#sheet-body .qitem").forEach(b => b.onclick = () =>
-    openDuration(ACTIVITIES.find(a => a.id === b.dataset.id)));
+    openDuration(allActs(S.profile).find(a => a.id === b.dataset.id)));
 }
 
 function openDuration(a){
-  const kg = S.profile.weight, perH = kcalPerHour(a.met, kg);
+  const kg = S.profile.weight, perH = kcalHour(a, kg);
   openSheet(a.n, `
     <div class="field"><label for="tr-min">Dauer in Minuten</label>
       <input id="tr-min" type="number" inputmode="numeric" value="45"></div>
@@ -1632,6 +1639,7 @@ function openSettings(){
     foods: [...p.foods],
     excluded: [...(p.excluded || [])],
     customFoods: [...(p.customFoods || [])],
+    customActivities: [...(p.customActivities || [])],
     customDislikes: [...(p.customDislikes || [])]
   };
 
@@ -1737,6 +1745,13 @@ function openSettings(){
     </div>
 
     <div class="settings-grp">
+      <p class="eyebrow">Eigene Trainings</p>
+      <div id="st-ownact"></div>
+      <button class="pick-open" id="act-add" style="margin-top:10px">
+        <span>Training anlegen</span><span class="pick-count">+</span></button>
+    </div>
+
+    <div class="settings-grp">
       <p class="eyebrow">Unverträglichkeiten</p>
       <div id="st-avoid"></div>
       <div class="row" style="margin-top:10px">
@@ -1826,17 +1841,18 @@ function openSettings(){
   }
 
   const foodLabel = f => `${f.k} kcal/100 g`;
-  const actLabel  = a => `${kcalPerHour(a.met, draft.weight)} kcal/h`;
+  const actLabel  = a => `${kcalHour(a, draft.weight)} kcal/h`;
 
   function repaintPickers(){
     const list = allFoods(draft).filter(f => fitsDiet(f, draft.diet));
     // Auswahl bereinigen, die zur aktuellen Ernährungsform nicht mehr passt
     draft.foods    = draft.foods.filter(id => list.some(f => f.id === id));
     draft.excluded = draft.excluded.filter(id => list.some(f => f.id === id));
-    picker("#pk-acts",  ACTIVITIES, "activities", actLabel);
+    picker("#pk-acts",  allActs(draft), "activities", actLabel);
     picker("#pk-foods", list, "foods",    foodLabel, "sel", "excluded");
     picker("#pk-excl",  list, "excluded", foodLabel, "no",  "foods");
     paintOwn();
+    paintOwnActs();
   }
   repaintPickers();
 
@@ -1883,6 +1899,28 @@ function openSettings(){
       repaintPickers();
     });
   }
+
+  /* Eigene Trainings */
+  function paintOwnActs(){
+    const own = draft.customActivities;
+    $("#st-ownact").innerHTML = own.length
+      ? own.map(a => `<div class="own">
+          <span class="t-txt"><span class="t-ttl">${esc(a.n)}</span>
+            <span class="t-sub">${a.kcalh} kcal pro Stunde</span></span>
+          <button class="del" data-id="${a.id}" aria-label="Entfernen">${X}</button></div>`).join("")
+      : `<p class="pick-none">Noch keine eigenen Trainings.</p>`;
+    $$("#st-ownact .del").forEach(b => b.onclick = () => {
+      draft.customActivities = draft.customActivities.filter(a => a.id !== b.dataset.id);
+      draft.activities = draft.activities.filter(id => id !== b.dataset.id);
+      repaintPickers();
+    });
+  }
+
+  $("#act-add").onclick = () => openOwnAct(a => {
+    draft.customActivities.push(a);
+    draft.activities.push(a.id);       // eigenes Training gleich als Favorit
+    openSettingsKeep(draft);
+  });
 
   $("#own-add").onclick = () => openOwnFood(f => {
     draft.customFoods.push(f);
@@ -1962,6 +2000,36 @@ let settingsResume = null;
 function openSettingsKeep(draft){
   settingsResume = draft;
   openSettings();
+}
+
+/* Formular für ein eigenes Training */
+function openOwnAct(done){
+  openSheet("Eigenes Training", `
+    <div class="field"><label for="oa-n">Bezeichnung</label>
+      <input id="oa-n" type="text" placeholder="z. B. Bouldern in der Halle"></div>
+    <div class="field"><label for="oa-k">Kalorien pro Stunde</label>
+      <input id="oa-k" type="number" inputmode="numeric" placeholder="600"></div>
+    <p class="hint" id="oa-note"></p>
+  `, `<button class="btn btn-primary" id="oa-save">Anlegen</button>
+      <button class="btn btn-ghost" id="oa-back">Abbrechen</button>`);
+
+  const check = () => {
+    const k = +$("#oa-k").value || 0;
+    $("#oa-note").textContent = k
+      ? `Ergibt ${num(Math.round(k/2))} kcal für 30 Minuten.`
+      : "Dieser Wert gilt unabhängig vom Körpergewicht — er kommt direkt von dir.";
+  };
+  $("#oa-k").oninput = check;
+  check();
+
+  $("#oa-save").onclick = () => {
+    const n = $("#oa-n").value.trim(), k = +$("#oa-k").value;
+    if (!n) { toast("Bitte eine Bezeichnung eintragen."); return; }
+    if (!(k > 0 && k <= 2000)) { toast("Kalorien zwischen 1 und 2000 pro Stunde eintragen."); return; }
+    done({ id: "act_" + crypto.randomUUID().slice(0,8), g: "Eigene", n,
+           kcalh: Math.round(k), custom: true });
+  };
+  $("#oa-back").onclick = () => openSettings();
 }
 
 /* Formular für ein eigenes Lebensmittel */
