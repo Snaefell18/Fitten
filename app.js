@@ -307,6 +307,9 @@ function dayTdee(){
   return viewingToday() ? tdeeOf(S.profile) : (S.day?.tdee ?? tdeeOf(S.profile));
 }
 
+function dayBmr(){
+  return viewingToday() ? bmrOf(S.profile) : (S.day?.bmr ?? bmrOf(S.profile));
+}
 function dayMacros(){
   return viewingToday() ? macroTargets(S.profile) : (S.day?.macros ?? macroTargets(S.profile));
 }
@@ -428,6 +431,7 @@ async function saveDay(){
   if (viewingToday() || S.day.target == null){
     S.day.target = targetOf(S.profile);
     S.day.tdee   = tdeeOf(S.profile);
+    S.day.bmr    = bmrOf(S.profile);
     S.day.macros = macroTargets(S.profile);
   }
   await setDoc(doc(db, "users", S.uid, "days", S.dayKey), S.day);
@@ -1019,7 +1023,7 @@ async function openDays(){
 /* ── Eintrag bearbeiten: langes Drücken öffnet das Menü ────────────────
    Kein Kontextmenü des Systems, und ein Fingerwisch bricht ab, damit
    Scrollen nicht versehentlich auslöst. */
-function bindHold(el){
+function onHold(el, action){
   let timer = null, sx = 0, sy = 0;
   const clear = () => { clearTimeout(timer); timer = null; el.classList.remove("held"); };
 
@@ -1030,7 +1034,7 @@ function bindHold(el){
     timer = setTimeout(() => {
       clear();
       if (navigator.vibrate) navigator.vibrate(12);
-      openEntryMenu(el.dataset.kind, el.dataset.id);
+      action();
     }, 480);
   };
   el.onpointermove = e => {
@@ -1039,6 +1043,40 @@ function bindHold(el){
   el.onpointerup = clear;
   el.onpointercancel = clear;
   el.onpointerleave = clear;
+}
+
+const bindHold = el => onHold(el, () => openEntryMenu(el.dataset.kind, el.dataset.id));
+
+/* Aufschlüsselung der großen Zahl — zeigt jeden Rechenschritt, damit
+   nachvollziehbar ist, wo das Budget herkommt. */
+onHold($("#h-left"), () => openBreakdown());
+
+function openBreakdown(){
+  const t = totals();
+  const bmr  = dayBmr();
+  const life = t.tdee - bmr;
+  const goal = t.target - t.tdee;
+  const sign = v => (v >= 0 ? "+" : "−") + num(Math.abs(v));
+  const gName = (GOALS.find(g => g.id === S.profile.goal) || {}).n || "Ziel";
+  const lName = (LIFESTYLE.find(l => l.id === S.profile.lifestyle) || {}).n || "Alltag";
+
+  const row = (label, value, cls = "") =>
+    `<div class="${cls}"><span>${esc(label)}</span><b>${value}</b></div>`;
+
+  openSheet("Zusammensetzung", `
+    <div class="glass calc">
+      ${row("Grundumsatz in Ruhe", num(bmr))}
+      ${row("Alltag · " + lName, sign(life))}
+      ${row("Grundbedarf", num(t.tdee), "sum")}
+      ${row("Ziel · " + gName, sign(goal))}
+      ${row("Tagesziel", num(t.target), "sum")}
+      ${row("Training", sign(t.moved))}
+      ${row("Gegessen", sign(-t.eaten))}
+      ${row(t.left < 0 ? "Über dem Budget" : "Noch verfügbar",
+            (t.left < 0 ? "−" : "") + num(Math.abs(t.left)), "total" + (t.left < 0 ? " over" : ""))}
+    </div>
+    <p class="hint" style="text-align:center">Grundumsatz nach Mifflin-St Jeor aus Gewicht, Größe, Alter und Geschlecht.</p>
+  `);
 }
 
 function openEntryMenu(kind, id){
