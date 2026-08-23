@@ -381,7 +381,8 @@ onAuthStateChanged(auth, async user => {
     await loadDay();
     renderHome();
     screen("s-home");
-    setTimeout(maybeShowInstall, 1500);
+    setTimeout(maybeRecap, 900);
+    setTimeout(maybeShowInstall, 2600);
   } else {
     S.draft = { sex:"m", lifestyle:"mid", goal:"cut1", diet:"all", activities:[], foods:[], excluded:[] };
     S.obStep = 0;
@@ -413,15 +414,17 @@ async function listDays(){
     const meals = v.meals || [], workouts = v.workouts || [];
     if (!meals.length && !workouts.length) return;
     out.push({
-      key:    d.id,
-      eaten:  meals.reduce((a,m) => a + m.kcal, 0),
-      moved:  workouts.reduce((a,w) => a + w.kcal, 0),
-      target: v.target ?? null,
-      n:      meals.length + workouts.length
+      key:      d.id,
+      eaten:    meals.reduce((a,m) => a + m.kcal, 0),
+      moved:    workouts.reduce((a,w) => a + w.kcal, 0),
+      target:   v.target ?? null,
+      mealsN:   meals.length,
+      trainings:workouts.length,
+      n:        meals.length + workouts.length
     });
   });
   if (!out.some(d => d.key === todayKey()))
-    out.push({ key: todayKey(), eaten:0, moved:0, n:0 });
+    out.push({ key: todayKey(), eaten:0, moved:0, mealsN:0, trainings:0, n:0 });
   return out.sort((a,b) => b.key.localeCompare(a.key));
 }
 async function saveDay(){
@@ -761,6 +764,111 @@ function renderHome(){
   });
 })();
 
+/* ─────────────────  9e. WOCHENRÜCKBLICK  ───────────────── */
+
+/* Ausgewertet wird die Woche von Montag bis Sonntag, die um 18 Uhr am
+   Sonntag als abgeschlossen gilt. Ist dieser Zeitpunkt heute noch nicht
+   erreicht, gilt die Vorwoche. */
+function recapSunday(now = new Date()){
+  const dow = (now.getDay() + 6) % 7;             // Montag = 0
+  const sun = new Date(now);
+  sun.setDate(now.getDate() + (6 - dow));
+  sun.setHours(18, 0, 0, 0);
+  if (now < sun) sun.setDate(sun.getDate() - 7);
+  return sun;
+}
+const dkey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+function recapWeek(sunday){
+  const keys = [];
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() - i);
+    keys.push(dkey(d));
+  }
+  return keys;
+}
+
+function summarize(days, keys, fallbackTarget){
+  const inWeek = days.filter(d => keys.includes(d.key));
+  const eatenDays = inWeek.filter(d => d.mealsN > 0);
+  let saved = 0, onTarget = 0;
+  eatenDays.forEach(d => {
+    const budget = (d.target ?? fallbackTarget) + d.moved;
+    saved += budget - d.eaten;
+    if (d.eaten <= budget) onTarget++;
+  });
+  return {
+    saved: Math.round(saved),
+    onTarget,
+    trackedDays: eatenDays.length,
+    trainings: inWeek.reduce((a,d) => a + d.trainings, 0),
+    trainKcal: inWeek.reduce((a,d) => a + d.moved, 0)
+  };
+}
+
+async function openRecap(silent = false){
+  const sun  = recapSunday();
+  const keys = recapWeek(sun);
+
+  if (!silent) openSheet("Deine Woche",
+    `<div class="analyzing"><span class="spin"></span>Woche wird ausgewertet …</div>`);
+
+  let days;
+  try { days = await listDays(); }
+  catch {
+    if (!silent) $("#sheet-body").innerHTML = `<p class="log-empty">Die Woche konnte nicht geladen werden.</p>`;
+    return false;
+  }
+
+  const r = summarize(days, keys, targetOf(S.profile));
+  if (silent && !r.trackedDays && !r.trainings) return false;   // nichts zu zeigen
+
+  const fmt = k => { const [y,m,d] = k.split("-").map(Number);
+    return new Date(y, m-1, d).toLocaleDateString("de-DE", { day:"numeric", month:"short" }); };
+
+  const savedLabel = r.saved >= 0 ? "kcal eingespart" : "kcal über dem Budget";
+  const kicker = !r.trackedDays
+    ? "Diese Woche war noch nichts erfasst — nächste Woche ist eine neue Gelegenheit."
+    : r.onTarget === r.trackedDays
+      ? "An jedem erfassten Tag im Budget geblieben. Stark."
+      : `An ${r.onTarget} von ${r.trackedDays} erfassten Tagen im Budget geblieben.`;
+
+  if (silent) openSheet("Deine Woche", "");
+  $("#sheet-body").innerHTML = `
+    <p class="hint" style="margin:0 0 14px; text-align:center">${fmt(keys[0])} bis ${fmt(keys[6])}</p>
+
+    <div class="res-total" style="${r.saved < 0 ? "background:linear-gradient(180deg,#F97316,#EF4444);box-shadow:0 12px 26px rgba(200,60,20,.28)" : ""}">
+      <span style="font-weight:650">${savedLabel}</span><b>${num(Math.abs(r.saved))}</b></div>
+
+    <div class="macros" style="margin-top:12px">
+      <div class="macro pr"><span class="eyebrow">Im Budget</span>
+        <b>${r.onTarget}<span> / ${r.trackedDays}</span></b></div>
+      <div class="macro ch"><span class="eyebrow">Trainings</span>
+        <b>${r.trainings}</b></div>
+      <div class="macro fa"><span class="eyebrow">Bewegung</span>
+        <b>${num(r.trainKcal)}<span> kcal</span></b></div>
+    </div>
+
+    <p class="hint" style="text-align:center; margin-top:14px">${esc(kicker)}</p>`;
+  $("#sheet-foot").innerHTML = `<button class="btn btn-primary" id="rc-ok">Weiter geht's</button>`;
+  $("#rc-ok").onclick = closeSheet;
+
+  // Merken, damit derselbe Rückblick nicht bei jedem Start erscheint
+  const seen = dkey(sun);
+  if (S.profile.recapSeen !== seen){
+    S.profile.recapSeen = seen;
+    try { await saveProfile(); } catch {}
+  }
+  return true;
+}
+
+/* Nach dem Start einmal je Woche von selbst zeigen */
+async function maybeRecap(){
+  if (!S.profile || S.profile.recapSeen === dkey(recapSunday())) return;
+  await openRecap(true);
+}
+
 /* ─────────────────  9d. COACH-CHAT  ───────────────── */
 
 const COACH_ENDPOINT = "/api/coach";
@@ -1046,6 +1154,9 @@ function onHold(el, action){
 }
 
 const bindHold = el => onHold(el, () => openEntryMenu(el.dataset.kind, el.dataset.id));
+
+// Langes Drücken aufs Datum ruft den Rückblick jederzeit auf
+onHold($("#h-date"), () => openRecap());
 
 /* Aufschlüsselung der großen Zahl — zeigt jeden Rechenschritt, damit
    nachvollziehbar ist, wo das Budget herkommt. */
