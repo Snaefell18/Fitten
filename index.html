@@ -318,9 +318,24 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     radial-gradient(120% 140% at 18% 0%, rgba(122,162,255,.32), transparent 60%),
     linear-gradient(160deg,#2A2F3C 0%,#141821 45%,#080A0F 100%);
   box-shadow:0 2px 4px rgba(0,0,0,.28), 0 8px 22px rgba(0,0,0,.34)}
-.big{font-size:clamp(60px,19vw,92px); font-weight:800; letter-spacing:-.055em; line-height:.92;
+.big{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  transition:opacity .12s;
+  font-size:clamp(60px,19vw,92px); font-weight:800; letter-spacing:-.055em; line-height:.92;
   margin:0; font-variant-numeric:tabular-nums}
 .big.over{color:var(--bad)}
+.big.held{opacity:.55}
+
+/* Aufschlüsselung des Tagesbudgets */
+.calc{padding:6px 8px}
+.calc div{display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  padding:11px 12px; font-size:15px; font-weight:600; color:var(--ink-2)}
+.calc div b{font-size:16px; font-weight:700; color:var(--ink);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+.calc div.sum{box-shadow:inset 0 1px 0 rgba(140,170,220,.28); color:var(--ink); font-weight:700}
+.calc div.total{box-shadow:inset 0 1.5px 0 rgba(29,110,245,.35); margin-top:2px;
+  color:var(--blue-700); font-weight:750}
+.calc div.total b{font-size:22px; font-weight:800; color:var(--blue-700)}
+.calc div.total.over, .calc div.total.over b{color:var(--bad)}
 .big-sub{font-size:17px; font-weight:600; color:var(--ink-2); margin:10px 0 0; letter-spacing:-.01em}
 
 .rail{height:9px; border-radius:99px; background:rgba(255,255,255,.72); margin:8px 0 9px;
