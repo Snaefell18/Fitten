@@ -42,7 +42,10 @@
 
   --r-xl:30px; --r-lg:24px; --r-md:18px; --r-sm:13px;
   --pad:20px;
-  --font:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+  /* Die CJK-Schriften am Ende greifen nur für Zeichen, die die davor
+     genannten Schriften nicht haben — lateinischer Text bleibt unverändert. */
+  --font:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, system-ui,
+         "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}

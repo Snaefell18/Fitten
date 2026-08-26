@@ -265,7 +265,8 @@ function setLang(lang){
   if (!LANG_IDS.includes(lang)) return;
   LANG = lang;
   try { localStorage.setItem(LANG_KEY, lang); } catch {}
-  document.documentElement.lang = lang;
+  // Volles Sprach-Tag: bei CJK hängt die Glyphenwahl an der Region
+  document.documentElement.lang = LOCALE[lang] || lang;
   document.title = t("app.title");
   localizeData();
   applyStaticText();
@@ -2143,11 +2144,16 @@ function openSettingsKeep(draft){
    müssen Impressum und Datenschutz angepasst werden — dann auch
    LEGAL_UPDATED hochsetzen. Nicht anwaltlich geprüft. */
 
-const LEGAL_UPDATED = "23. August 2026";
+const LEGAL_UPDATED = "2026-08-23";
+const legalDate = () => {
+  const [y,m,d] = LEGAL_UPDATED.split("-").map(Number);
+  return new Date(y, m-1, d).toLocaleDateString(LOCALE[LANG],
+    { day:"numeric", month:"long", year:"numeric" });
+};
 
 /* Die Texte selbst stehen in i18n.js — hier nur der Zugriff in der
    aktiven Sprache. */
-const legalDocs = () => (LEGAL_TEXT[LANG] || LEGAL_TEXT.de)(LEGAL_UPDATED);
+const legalDocs = () => (LEGAL_TEXT[LANG] || LEGAL_TEXT.de)(legalDate());
 
 /* Konto und sämtliche Daten entfernen. Erst Firestore, dann das Konto selbst —
    nach dem Löschen des Kontos fehlt die Berechtigung für die Dokumente. */
