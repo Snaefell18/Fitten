@@ -17,7 +17,7 @@ const MODELS = {
 };
 const modelFor = tier => MODELS[tier] || MODELS.basis;
 
-const SYSTEM = `Du bist Ernährungsberater in einer Fitness-App und schlägst vor,
+const SYSTEM_DE = `Du bist Ernährungsberater in einer Fitness-App und schlägst vor,
 was heute noch gegessen werden kann.
 
 Regeln:
@@ -36,9 +36,58 @@ Regeln:
 
 Gib 2 bis 3 Vorschläge mit konkreten Mengen in Gramm oder Stück. Schätze Kalorien
 und Makros realistisch. "why" und "note" sind je genau ein kurzer Satz — bleib
-sachlich und bewerte den bisherigen Tag nicht.`;
+sachlich und bewerte den bisherigen Tag nicht. Antworte auf Deutsch.`;
 
-const SCHEMA = {
+const SYSTEM_EN = `You are a nutrition adviser inside a fitness app, suggesting what
+the user could still eat today.
+
+Rules:
+1. Stay within the remaining calorie budget. Coming in slightly under is good,
+   clearly over is a mistake.
+2. Prioritise the macros that are still open. If protein is what is missing, suggest
+   high-protein options; if barely any calories are left, suggest something small.
+3. Prefer the favourite foods listed and combine them into realistic meals. Other
+   foods are allowed as long as they fit the way of eating.
+4. The way of eating and the intolerances are binding. Vegan means no animal products
+   at all, vegetarian no meat and no fish, pescatarian no meat. Never suggest anything
+   that could contain a listed intolerance.
+5. Do not repeat what has already been eaten today.
+6. If the budget is used up or exceeded, return an empty list and explain that kindly
+   in "note".
+
+Give 2 to 3 suggestions with concrete amounts in grams or pieces. Estimate calories
+and macros realistically. "why" and "note" are exactly one short sentence each — stay
+factual and do not judge how the day has gone. Answer in English.`;
+
+const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : SYSTEM_DE);
+
+/* Die Beschreibungen im Schema steuern die Ausgabesprache mit. */
+const SCHEMA = lang => lang === "en" ? {
+  type: "object",
+  properties: {
+    options: {
+      type: "array",
+      description: "Two to three suggestions, empty when the budget is used up.",
+      items: {
+        type: "object",
+        properties: {
+          name:   { type: "string",  description: "Name of the meal in English." },
+          amount: { type: "string",  description: "Concrete amounts, e.g. 250 g skyr, 100 g berries." },
+          kcal:   { type: "integer", description: "Calories of the suggestion." },
+          pr:     { type: "integer", description: "Protein in grams." },
+          ch:     { type: "integer", description: "Carbohydrates in grams." },
+          fa:     { type: "integer", description: "Fat in grams." },
+          why:    { type: "string",  description: "One short sentence on why this fits now." }
+        },
+        required: ["name", "amount", "kcal", "pr", "ch", "fa", "why"],
+        additionalProperties: false
+      }
+    },
+    note: { type: "string", description: "One short sentence on the overall situation." }
+  },
+  required: ["options", "note"],
+  additionalProperties: false
+} : {
   type: "object",
   properties: {
     options: {
@@ -64,6 +113,31 @@ const SCHEMA = {
   required: ["options", "note"],
   additionalProperties: false
 };
+
+/* Sprache des Nutzers — steuert Prompt, Schema und Fehlermeldungen. */
+const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+
+const MSG = {
+  de: {
+    missing_key: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel anlegen und neu deployen.",
+    bad_body:    "Anfrage konnte nicht gelesen werden.",
+    timeout:     "Zeitüberschreitung.",
+    bad_json:    "Antwort der Anthropic-API war kein gültiges JSON.",
+    cut:         "Die Antwort war zu lang und wurde abgeschnitten.",
+    refusal:     "Claude hat die Anfrage abgelehnt.",
+    unusable:    "Claude hat kein verwertbares JSON geliefert."
+  },
+  en: {
+    missing_key: "ANTHROPIC_API_KEY is not set. Add it in Vercel and redeploy.",
+    bad_body:    "The request could not be read.",
+    timeout:     "The request timed out.",
+    bad_json:    "The Anthropic API response was not valid JSON.",
+    cut:         "The answer was too long and got cut off.",
+    refusal:     "Claude declined the request.",
+    unusable:    "Claude did not return usable JSON."
+  }
+};
+const msg = (lang, key) => MSG[lang][key];
 
 /* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt
    Denken UND Antwort zusammen. Ohne Abschalten bleibt bei knappem Budget
@@ -91,6 +165,7 @@ function salvage(text){
 }
 
 export default async function handler(req, res){
+  let lang = "de";
   try {
     const key = process.env.ANTHROPIC_API_KEY;
 
@@ -108,7 +183,7 @@ export default async function handler(req, res){
 
     if (!key) return res.status(500).json({
       error: "missing_key",
-      message: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel anlegen und neu deployen."
+      message: msg(lang, "missing_key")
     });
 
     let body = req.body;
@@ -121,7 +196,7 @@ export default async function handler(req, res){
         for await (const c of req) chunks.push(c);
         body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       } catch {
-        return res.status(400).json({ error: "bad_body", message: "Anfrage konnte nicht gelesen werden." });
+        return res.status(400).json({ error: "bad_body", message: msg(lang, "bad_body") });
       }
     }
 
@@ -131,11 +206,25 @@ export default async function handler(req, res){
       goal = "", time = "", tier = "basis"
     } = body;
 
-    const favList = favorites.length
-      ? favorites.map(f => `- ${f.n} (${f.k} kcal/100 g; E ${f.pr} / K ${f.ch} / F ${f.fa})`).join("\n")
-      : "keine angegeben";
+    lang = langOf(body.lang);
 
-    const prompt = `Aktuelle Lage:
+    const favList = favorites.length
+      ? favorites.map(f => `- ${f.n} (${f.k} kcal/100 g; ${lang === "en" ? "P" : "E"} ${f.pr} / ${lang === "en" ? "C" : "K"} ${f.ch} / F ${f.fa})`).join("\n")
+      : (lang === "en" ? "none given" : "keine angegeben");
+
+    const prompt = lang === "en" ? `Where things stand:
+- Still available: ${Math.round(left)} kcal
+- Macros still open: ${Math.round(macrosLeft.pr || 0)} g protein, ${Math.round(macrosLeft.ch || 0)} g carbs, ${Math.round(macrosLeft.fa || 0)} g fat
+- Way of eating: ${diet}
+- Intolerances, strictly avoid: ${avoid.length ? avoid.join(", ") : "none"}
+- Goal: ${goal}
+- Time: ${time || "unknown"}
+- Already eaten today: ${eatenToday.length ? eatenToday.join(", ") : "nothing yet"}
+
+Favourite foods:
+${favList}
+
+What still fits?` : `Aktuelle Lage:
 - Noch verfügbar: ${Math.round(left)} kcal
 - Offene Makros: ${Math.round(macrosLeft.pr || 0)} g Eiweiß, ${Math.round(macrosLeft.ch || 0)} g Kohlenhydrate, ${Math.round(macrosLeft.fa || 0)} g Fett
 - Ernährungsform: ${diet}
@@ -166,16 +255,16 @@ Was passt jetzt noch?`;
           model: modelFor(tier),
           ...thinkingOff(modelFor(tier)),
           max_tokens: 2500,
-          system: SYSTEM,
+          system: SYSTEM(lang),
           messages: [{ role: "user", content: prompt }],
-          output_config: { format: { type: "json_schema", schema: SCHEMA } }
+          output_config: { format: { type: "json_schema", schema: SCHEMA(lang) } }
         })
       });
       rawText = await response.text();
     } catch (e) {
       return res.status(504).json({
         error: "upstream_failed",
-        message: e.name === "AbortError" ? "Zeitüberschreitung." : String(e.message || e)
+        message: e.name === "AbortError" ? msg(lang, "timeout") : String(e.message || e)
       });
     } finally {
       clearTimeout(timer);
@@ -195,7 +284,7 @@ Was passt jetzt noch?`;
     try { raw = JSON.parse(rawText); }
     catch {
       return res.status(502).json({ error: "invalid_anthropic_response",
-        message: "Antwort der Anthropic-API war kein gültiges JSON." });
+        message: msg(lang, "bad_json") });
     }
 
     const text = (raw.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
@@ -209,10 +298,10 @@ Was passt jetzt noch?`;
         model: modelFor(tier),
         stop_reason: raw.stop_reason || null,
         message: raw.stop_reason === "max_tokens"
-          ? "Die Antwort war zu lang und wurde abgeschnitten."
+          ? msg(lang, "cut")
           : raw.stop_reason === "refusal"
-            ? "Claude hat die Anfrage abgelehnt."
-            : "Claude hat kein verwertbares JSON geliefert.",
+            ? msg(lang, "refusal")
+            : msg(lang, "unusable"),
         raw_preview: text.slice(0, 300)
       });
     }

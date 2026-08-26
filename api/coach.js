@@ -22,7 +22,42 @@ const modelFor = tier => MODELS[tier] || MODELS.premium;
 /* Nur die letzten Nachrichten mitschicken — hält Kosten und Latenz stabil */
 const HISTORY_LIMIT = 24;
 
-function buildSystem(c = {}){
+/* Sprache des Nutzers. Sie steuert den Systemprompt und die Meldungen,
+   die im Fehlerfall in der App landen. */
+const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+
+const MSG = {
+  de: {
+    missing_key: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel anlegen und neu deployen.",
+    bad_body:    "Anfrage konnte nicht gelesen werden.",
+    tier:        "Der Coach ist Teil von Premium und Ultra+.",
+    no_message:  "Keine Frage übermittelt.",
+    timeout:     "Zeitüberschreitung.",
+    bad_json:    "Antwort der Anthropic-API war kein gültiges JSON.",
+    cut:         k => `Die Antwort wurde abgeschnitten (Blöcke: ${k}). Token-Limit erhöhen.`,
+    empty:       (k, r) => `Der Coach hat keinen Text geliefert (Blöcke: ${k}, Grund: ${r || "unbekannt"}).`
+  },
+  en: {
+    missing_key: "ANTHROPIC_API_KEY is not set. Add it in Vercel and redeploy.",
+    bad_body:    "The request could not be read.",
+    tier:        "The coach is part of Premium and Ultra+.",
+    no_message:  "No question was sent.",
+    timeout:     "The request timed out.",
+    bad_json:    "The Anthropic API response was not valid JSON.",
+    cut:         k => `The answer was cut off (blocks: ${k}). Raise the token limit.`,
+    empty:       (k, r) => `The coach returned no text (blocks: ${k}, reason: ${r || "unknown"}).`
+  }
+};
+const msg = (lang, key, ...a) => {
+  const v = MSG[lang][key];
+  return typeof v === "function" ? v(...a) : v;
+};
+
+function buildSystem(c = {}, lang = "de"){
+  return lang === "en" ? systemEN(c) : systemDE(c);
+}
+
+function systemDE(c){
   const list = a => (Array.isArray(a) && a.length) ? a.join(", ") : "keine";
 
   return `Du bist der persönliche Fitness- und Ernährungscoach in der App FITTEN.ME.
@@ -76,7 +111,67 @@ Vorlieben:
 - Bevorzugte Aktivitäten: ${list(c.activities)}
 
 Nennst du konkrete Mengen, gib Gramm oder Stück an und schätze die Kalorien
-realistisch. Passe Vorschläge immer an das an, was heute noch übrig ist.`;
+realistisch. Passe Vorschläge immer an das an, was heute noch übrig ist.
+
+Antworte auf Deutsch.`;
+}
+
+function systemEN(c){
+  const list = a => (Array.isArray(a) && a.length) ? a.join(", ") : "none";
+
+  return `You are the personal fitness and nutrition coach inside the FITTEN.ME app.
+
+YOUR TONE
+Very friendly, warm and encouraging. Keep it short and concrete — two to five
+sentences are usually enough. No bullet lists unless the user asks for a list. No
+jargon without an explanation. You never judge the user and never make them feel
+guilty.
+
+YOUR SUBJECT
+You only answer questions about nutrition, training, fitness, losing weight and
+gaining weight. If a question is about something else, you say in a friendly way
+that you are the wrong person for it and offer to help with food or training
+instead. Stay warm, never dismissive.
+
+YOUR LIMITS
+You are not a doctor. With complaints, pain, medication, pregnancy or a suspected
+illness, you refer the user to medical advice in a friendly way. You do not
+recommend calorie targets below 1500 kcal for men and 1200 kcal for women, and no
+extreme approaches. If someone seems very distressed about food or their body, you
+tread carefully and point to professional support instead of giving numbers.
+
+WHAT YOU KNOW ABOUT THE USER
+Use these details without listing them unprompted. Refer to them when it makes the
+answer better.
+
+Body and goal:
+- Weight: ${c.weight ?? "?"} kg, height: ${c.height ?? "?"} cm, age: ${c.age ?? "?"}, sex: ${c.sex === "w" ? "female" : "male"}
+- Resting metabolic rate: ${c.bmr ?? "?"} kcal
+- Maintenance including everyday life: ${c.tdee ?? "?"} kcal (everyday life: ${c.lifestyle ?? "?"})
+- Goal: ${c.goal ?? "?"}
+- Daily target: ${c.target ?? "?"} kcal
+
+Daily macro targets:
+- Protein ${c.macroTarget?.pr ?? "?"} g, carbs ${c.macroTarget?.ch ?? "?"} g, fat ${c.macroTarget?.fa ?? "?"} g
+
+Today so far (${c.time || "time unknown"}):
+- Eaten: ${c.eaten ?? 0} kcal, of that protein ${c.got?.pr ?? 0} g, carbs ${c.got?.ch ?? 0} g, fat ${c.got?.fa ?? 0} g
+- Extra available through training: ${c.moved ?? 0} kcal
+- Still available: ${c.left ?? 0} kcal
+- Logged today: ${list(c.eatenToday)}
+
+Preferences:
+- Way of eating: ${c.diet ?? "Everything"}
+- Favourite foods: ${list(c.favorites)}
+- Dislikes: ${list(c.dislikes)}
+- Intolerances, strictly avoid: ${list(c.avoid)}
+- Own foods: ${list(c.customFoods)}
+- Preferred activities: ${list(c.activities)}
+
+When you name concrete amounts, give grams or pieces and estimate the calories
+realistically. Always fit suggestions to what is left for today.
+
+Answer in English.`;
 }
 
 /* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt
@@ -90,6 +185,7 @@ function thinkingOff(model){
 export const config = { maxDuration: 60 };
 
 export default async function handler(req, res){
+  let lang = "de";
   try {
     const key = process.env.ANTHROPIC_API_KEY;
 
@@ -106,7 +202,7 @@ export default async function handler(req, res){
 
     if (!key) return res.status(500).json({
       error: "missing_key",
-      message: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel anlegen und neu deployen."
+      message: msg(lang, "missing_key")
     });
 
     let body = req.body;
@@ -119,15 +215,16 @@ export default async function handler(req, res){
         for await (const c of req) chunks.push(c);
         body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       } catch {
-        return res.status(400).json({ error: "bad_body", message: "Anfrage konnte nicht gelesen werden." });
+        return res.status(400).json({ error: "bad_body", message: msg(lang, "bad_body") });
       }
     }
 
+    lang = langOf(body.lang);
     const tier = String(body.tier || "").toLowerCase();
     if (tier !== "premium" && tier !== "ultra"){
       return res.status(403).json({
         error: "tier_required",
-        message: "Der Coach ist Teil von Premium und Ultra+."
+        message: msg(lang, "tier")
       });
     }
 
@@ -143,7 +240,7 @@ export default async function handler(req, res){
     while (messages.length && messages[0].role === "assistant") messages.shift();
 
     if (!messages.length || messages[messages.length - 1].role !== "user"){
-      return res.status(400).json({ error: "no_message", message: "Keine Frage übermittelt." });
+      return res.status(400).json({ error: "no_message", message: msg(lang, "no_message") });
     }
 
     const ctrl  = new AbortController();
@@ -163,7 +260,7 @@ export default async function handler(req, res){
           model: modelFor(tier),
           ...thinkingOff(modelFor(tier)),
           max_tokens: 1400,
-          system: buildSystem(body.context || {}),
+          system: buildSystem(body.context || {}, lang),
           messages
         })
       });
@@ -171,7 +268,7 @@ export default async function handler(req, res){
     } catch (e) {
       return res.status(504).json({
         error: "upstream_failed",
-        message: e.name === "AbortError" ? "Zeitüberschreitung." : String(e.message || e)
+        message: e.name === "AbortError" ? msg(lang, "timeout") : String(e.message || e)
       });
     } finally {
       clearTimeout(timer);
@@ -191,7 +288,7 @@ export default async function handler(req, res){
     try { raw = JSON.parse(rawText); }
     catch {
       return res.status(502).json({ error: "invalid_anthropic_response",
-        message: "Antwort der Anthropic-API war kein gültiges JSON." });
+        message: msg(lang, "bad_json") });
     }
 
     const reply = (raw.content || [])
@@ -199,15 +296,15 @@ export default async function handler(req, res){
 
     if (!reply){
       // Blocktypen mitgeben — daran erkennt man sofort, ob nur gedacht wurde
-      const kinds = (raw.content || []).map(b => b.type).join(", ") || "keine";
+      const kinds = (raw.content || []).map(b => b.type).join(", ") || "-";
       return res.status(502).json({
         error: "empty_reply",
         model: modelFor(tier),
         stop_reason: raw.stop_reason || null,
         blocks: kinds,
         message: raw.stop_reason === "max_tokens"
-          ? `Die Antwort wurde abgeschnitten (Blöcke: ${kinds}). Token-Limit erhöhen.`
-          : `Der Coach hat keinen Text geliefert (Blöcke: ${kinds}, Grund: ${raw.stop_reason || "unbekannt"}).`
+          ? msg(lang, "cut", kinds)
+          : msg(lang, "empty", kinds, raw.stop_reason)
       });
     }
 
