@@ -19,7 +19,7 @@ const MODELS = {
 };
 const modelFor = tier => MODELS[tier] || MODELS.basis;
 
-const SYSTEM = `Du schätzt Kalorien für eine Fitness-App — aus einem Essensfoto,
+const SYSTEM_DE = `Du schätzt Kalorien für eine Fitness-App — aus einem Essensfoto,
 aus einer Textbeschreibung oder aus beidem.
 
 Vorgehen bei einem Foto:
@@ -42,11 +42,95 @@ ch = Kohlenhydrate, fa = Fett. Sie sollten grob zu den Kalorien passen
 Ist kein Essen zu erkennen, setzt du total_kcal und alle Makros auf 0,
 confidence auf "niedrig" und erklärst das in "note".
 
-"note" ist immer genau ein kurzer Satz.`;
+"note" ist immer genau ein kurzer Satz. Schreibe auf Deutsch.`;
+
+const SYSTEM_EN = `You estimate calories for a fitness app — from a photo of a meal,
+from a text description, or from both.
+
+With a photo:
+1. Name every component you can make out, one by one. Do not forget sides, sauces,
+   oil and drinks.
+2. Estimate the amount in grams or pieces from plate size, cutlery and camera angle.
+3. Work out the calories for each component.
+
+Without a photo you assume household portions unless an amount is given, and you
+record that assumption in "note".
+
+The user's comment always corrects your estimate from the image, never the other way
+round. For statements like "half a portion" you scale accordingly.
+
+Also estimate the macros of the whole meal in grams: pr = protein, ch = carbs,
+fa = fat. They should roughly match the calories (protein and carbs 4 kcal/g each,
+fat 9 kcal/g).
+
+If no food can be made out, set total_kcal and all macros to 0, confidence to
+"niedrig" and explain that in "note".
+
+"note" is always exactly one short sentence. Write in English.`;
+
+const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : SYSTEM_DE);
+
+/* Sprache des Nutzers — steuert Prompt, Schema und Fehlermeldungen.
+   Die Werte von "confidence" bleiben deutsch, sie sind reine Schlüssel. */
+const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+
+const MSG = {
+  de: {
+    missing_key: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel unter Settings → " +
+                 "Environment Variables anlegen und danach neu deployen.",
+    bad_body:    "Anfrage konnte nicht gelesen werden.",
+    no_input:    "Weder Bild noch Beschreibung übermittelt.",
+    timeout:     "Zeitüberschreitung.",
+    bad_json:    "Antwort der Anthropic-API war kein gültiges JSON.",
+    cut:         "Die Antwort war zu lang und wurde abgeschnitten.",
+    refusal:     "Claude hat die Anfrage abgelehnt.",
+    unusable:    "Claude hat kein verwertbares JSON geliefert."
+  },
+  en: {
+    missing_key: "ANTHROPIC_API_KEY is not set. Add it in Vercel under Settings → " +
+                 "Environment Variables and redeploy.",
+    bad_body:    "The request could not be read.",
+    no_input:    "Neither an image nor a description was sent.",
+    timeout:     "The request timed out.",
+    bad_json:    "The Anthropic API response was not valid JSON.",
+    cut:         "The answer was too long and got cut off.",
+    refusal:     "Claude declined the request.",
+    unusable:    "Claude did not return usable JSON."
+  }
+};
+const msg = (lang, key) => MSG[lang][key];
 
 /* Schema für die Antwort. Alle Felder required — das hält die Grammatik
    klein und sichert die Reihenfolge der Ausgabe. */
-const SCHEMA = {
+const SCHEMA = lang => lang === "en" ? {
+  type: "object",
+  properties: {
+    title:      { type: "string",  description: "Short name of the dish in English." },
+    items: {
+      type: "array",
+      description: "The individual components of the meal.",
+      items: {
+        type: "object",
+        properties: {
+          name:   { type: "string",  description: "Name of the component." },
+          amount: { type: "string",  description: "Estimated amount, e.g. 180 g or 2 pieces." },
+          kcal:   { type: "integer", description: "Calories of this component." }
+        },
+        required: ["name", "amount", "kcal"],
+        additionalProperties: false
+      }
+    },
+    total_kcal: { type: "integer", description: "Total calories of the meal." },
+    pr:         { type: "integer", description: "Protein in grams." },
+    ch:         { type: "integer", description: "Carbohydrates in grams." },
+    fa:         { type: "integer", description: "Fat in grams." },
+    confidence: { type: "string",  enum: ["hoch", "mittel", "niedrig"],
+                  description: "hoch = clearly recognised, mittel = portion estimated, niedrig = rough estimate." },
+    note:       { type: "string",  description: "One short sentence on the assumptions." }
+  },
+  required: ["title", "items", "total_kcal", "pr", "ch", "fa", "confidence", "note"],
+  additionalProperties: false
+} : {
   type: "object",
   properties: {
     title:      { type: "string",  description: "Kurzer Name des Gerichts auf Deutsch." },
@@ -105,6 +189,7 @@ function salvage(text){
 export default async function handler(req, res){
   /* Alles umschlossen: ohne diesen Rahmen zeigt Vercel bei einem
      unerwarteten Fehler nur FUNCTION_INVOCATION_FAILED ohne Hinweis. */
+  let lang = "de";
   try {
     const key = process.env.ANTHROPIC_API_KEY;
 
@@ -123,8 +208,7 @@ export default async function handler(req, res){
 
     if (!key) return res.status(500).json({
       error: "missing_key",
-      message: "ANTHROPIC_API_KEY ist nicht gesetzt. In Vercel unter Settings → " +
-               "Environment Variables anlegen und danach neu deployen."
+      message: msg(lang, "missing_key")
     });
 
     /* ── Body lesen ── */
@@ -138,7 +222,7 @@ export default async function handler(req, res){
         for await (const c of req) chunks.push(c);
         body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       } catch {
-        return res.status(400).json({ error: "bad_body", message: "Anfrage konnte nicht gelesen werden." });
+        return res.status(400).json({ error: "bad_body", message: msg(lang, "bad_body") });
       }
     }
 
@@ -146,15 +230,21 @@ export default async function handler(req, res){
     const mime  = body.mime || "image/jpeg";
     const note  = String(body.note || "").trim();
     const tier  = String(body.tier || "basis").toLowerCase();
+    lang = langOf(body.lang);
 
     if (!image && !note){
-      return res.status(400).json({ error: "no_input", message: "Weder Bild noch Beschreibung übermittelt." });
+      return res.status(400).json({ error: "no_input", message: msg(lang, "no_input") });
     }
 
-    const prompt = image
-      ? (note ? `Analysiere diese Mahlzeit. Zusatz-Info vom Nutzer: "${note}"`
-              : "Analysiere diese Mahlzeit.")
-      : `Der Nutzer beschreibt seine Mahlzeit so: "${note}"\n\nSchätze Kalorien und Makros.`;
+    const prompt = lang === "en"
+      ? (image
+          ? (note ? `Analyse this meal. Extra info from the user: "${note}"`
+                  : "Analyse this meal.")
+          : `The user describes their meal like this: "${note}"\n\nEstimate calories and macros.`)
+      : (image
+          ? (note ? `Analysiere diese Mahlzeit. Zusatz-Info vom Nutzer: "${note}"`
+                  : "Analysiere diese Mahlzeit.")
+          : `Der Nutzer beschreibt seine Mahlzeit so: "${note}"\n\nSchätze Kalorien und Makros.`);
 
     const content = image
       ? [{ type: "image", source: { type: "base64", media_type: mime, data: image } },
@@ -179,17 +269,17 @@ export default async function handler(req, res){
           model: modelFor(tier),
           ...thinkingOff(modelFor(tier)),
           max_tokens: 2000,
-          system: SYSTEM,
+          system: SYSTEM(lang),
           messages: [{ role: "user", content }],
           // Grammatik-gestützte Ausgabe. Kein Prefill — das ist damit unvereinbar.
-          output_config: { format: { type: "json_schema", schema: SCHEMA } }
+          output_config: { format: { type: "json_schema", schema: SCHEMA(lang) } }
         })
       });
       rawText = await response.text();
     } catch (e) {
       return res.status(504).json({
         error: "upstream_failed",
-        message: e.name === "AbortError" ? "Zeitüberschreitung bei der Analyse." : String(e.message || e)
+        message: e.name === "AbortError" ? msg(lang, "timeout") : String(e.message || e)
       });
     } finally {
       clearTimeout(timer);
@@ -209,7 +299,7 @@ export default async function handler(req, res){
     try { raw = JSON.parse(rawText); }
     catch {
       return res.status(502).json({ error: "invalid_anthropic_response",
-        message: "Antwort der Anthropic-API war kein gültiges JSON." });
+        message: msg(lang, "bad_json") });
     }
 
     const text = (raw.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();
@@ -223,10 +313,10 @@ export default async function handler(req, res){
         model: modelFor(tier),
         stop_reason: raw.stop_reason || null,
         message: raw.stop_reason === "max_tokens"
-          ? "Die Antwort war zu lang und wurde abgeschnitten."
+          ? msg(lang, "cut")
           : raw.stop_reason === "refusal"
-            ? "Claude hat die Anfrage abgelehnt."
-            : "Claude hat kein verwertbares JSON geliefert.",
+            ? msg(lang, "refusal")
+            : msg(lang, "unusable"),
         raw_preview: text.slice(0, 300)
       });
     }

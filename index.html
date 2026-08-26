@@ -703,8 +703,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="install" id="install">
     <img src="/icons/apple-touch-icon.png" alt="">
     <span class="tx"><b id="install-t"></b><span id="install-s"></span></span>
-    <button class="go" id="install-go" hidden>Installieren</button>
-    <button class="x" id="install-x" aria-label="Hinweis ausblenden">
+    <button class="go" id="install-go" data-i18n="in.install" hidden>Installieren</button>
+    <button class="x" id="install-x" data-i18n-aria="a.dismiss" aria-label="Hinweis ausblenden">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
@@ -714,22 +714,22 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <img class="mark" src="/icons/apple-touch-icon.png" alt="FITTEN.ME" width="88" height="88">
     <div class="center" style="margin-bottom:28px">
       <h1>FITTEN.ME</h1>
-      <p class="sub">Kalorien, Training und Fortschritt an einem Ort.</p>
+      <p class="sub" data-i18n="app.tagline">Kalorien, Training und Fortschritt an einem Ort.</p>
     </div>
 
     <div class="glass card">
       <div class="field">
-        <label for="li-mail">E-Mail</label>
-        <input id="li-mail" type="email" autocomplete="email" placeholder="du@beispiel.de">
+        <label for="li-mail" data-i18n="li.mail">E-Mail</label>
+        <input id="li-mail" type="email" autocomplete="email" data-i18n-ph="li.mailPh" placeholder="du@beispiel.de">
       </div>
       <div class="field">
-        <label for="li-pass">Passwort</label>
-        <input id="li-pass" type="password" autocomplete="current-password" placeholder="Mindestens 6 Zeichen">
+        <label for="li-pass" data-i18n="li.pass">Passwort</label>
+        <input id="li-pass" type="password" autocomplete="current-password" data-i18n-ph="li.passPh" placeholder="Mindestens 6 Zeichen">
       </div>
-      <button class="btn btn-primary" id="li-go">Anmelden</button>
-      <button class="btn btn-ghost" id="li-toggle">Noch kein Konto? Registrieren</button>
+      <button class="btn btn-primary" id="li-go" data-i18n="li.in">Anmelden</button>
+      <button class="btn btn-ghost" id="li-toggle" data-i18n="li.toUp">Noch kein Konto? Registrieren</button>
 
-      <div class="divider">ODER</div>
+      <div class="divider"><span data-i18n="li.or">ODER</span></div>
 
       <button class="btn btn-glass" id="li-google">
         <svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true">
@@ -738,7 +738,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <path fill="#FBBC05" d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84z"/>
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
         </svg>
-        Mit Google fortfahren
+        <span data-i18n="li.google">Mit Google fortfahren</span>
       </button>
       <p class="err" id="li-err"></p>
     </div>
@@ -754,8 +754,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
     <div class="ob-body" id="ob-body"></div>
     <div class="ob-foot">
-      <button class="btn btn-primary" id="ob-next">Weiter</button>
-      <button class="btn btn-ghost" id="ob-back">Zurück</button>
+      <button class="btn btn-primary" id="ob-next" data-i18n="btn.next">Weiter</button>
+      <button class="btn btn-ghost" id="ob-back" data-i18n="btn.back">Zurück</button>
     </div>
   </section>
 
@@ -763,23 +763,23 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <section class="screen" id="s-home">
     <div class="top">
       <div class="head-l">
-        <button class="date" id="h-date" aria-label="Tag wechseln"></button>
+        <button class="date" id="h-date" data-i18n-aria="a.day" aria-label="Tag wechseln"></button>
         <button class="tier" id="h-tier"></button>
       </div>
       <div class="head-r">
-      <button class="icon-btn" id="h-settings" aria-label="Einstellungen">
+      <button class="icon-btn" id="h-settings" data-i18n-aria="a.settings" aria-label="Einstellungen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
       </button>
-      <button class="icon-btn coach-btn" id="h-coach" aria-label="Coach öffnen" hidden></button>
+      <button class="icon-btn coach-btn" id="h-coach" data-i18n-aria="a.coach" aria-label="Coach öffnen" hidden></button>
       </div>
     </div>
 
     <div class="hero">
       <p class="big" id="h-left">0</p>
-      <p class="big-sub" id="h-left-label">kcal verfügbar</p>
+      <p class="big-sub" id="h-left-label" data-i18n="h.available">kcal verfügbar</p>
 
       <div class="rail"><span id="h-rail"></span></div>
       <div class="rail-legend">
@@ -791,8 +791,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <div class="macros page" id="h-macros"></div>
         <div class="page" id="h-sug-page">
           <button class="sug" id="a-suggest">
-            <span class="tx"><span class="eyebrow">Vorschlag</span>
-              <b>Was könnte ich heute noch essen?</b></span>
+            <span class="tx"><span class="eyebrow" data-i18n="h.sugEyebrow">Vorschlag</span>
+              <b data-i18n="h.sugQ">Was könnte ich heute noch essen?</b></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
               stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
           </button>
@@ -809,11 +809,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
           <circle cx="12" cy="13" r="4"/>
         </svg>
-        Meal erfassen
+        <span data-i18n="h.photo">Meal erfassen</span>
       </button>
       <div class="row" id="a-row">
-        <button class="btn btn-glass btn-sm" id="a-manual">+ Meal</button>
-        <button class="btn btn-glass btn-sm" id="a-train">+ Training</button>
+        <button class="btn btn-glass btn-sm" id="a-manual" data-i18n="h.manual">+ Meal</button>
+        <button class="btn btn-glass btn-sm" id="a-train" data-i18n="h.train">+ Training</button>
       </div>
     </div>
   </section>
@@ -826,7 +826,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="grab"></div>
     <div class="sheet-head">
       <h2 id="sheet-title"></h2>
-      <button class="icon-btn" id="sheet-close" aria-label="Schließen">
+      <button class="icon-btn" id="sheet-close" data-i18n-aria="a.close" aria-label="Schließen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
