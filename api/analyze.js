@@ -68,11 +68,34 @@ If no food can be made out, set total_kcal and all macros to 0, confidence to
 
 "note" is always exactly one short sentence. Write in English.`;
 
-const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : SYSTEM_DE);
+const SYSTEM_ZH = `你为一款健身应用估算热量 —— 依据食物照片、文字描述，或两者都有。
+
+看照片时的步骤：
+1. 逐一说出能辨认出的每个组成部分。配菜、酱汁、油和饮品都不要漏。
+2. 结合盘子大小、餐具和拍摄角度，估算克数或个数。
+3. 分别算出每个部分的热量。
+
+没有照片时，如果没写份量，就按家常份量估算，并把这个假设写进 "note"。
+
+用户的说明始终用来修正你从图片得到的估算，而不是反过来。遇到「只吃了一半」这类说法，
+就按比例缩放。
+
+另外估算整餐的营养素克数：pr = 蛋白质，ch = 碳水，fa = 脂肪。它们应大致与热量吻合
+（蛋白质和碳水各 4 千卡/克，脂肪 9 千卡/克）。
+
+如果照片里看不出任何食物，就把 total_kcal 和所有营养素设为 0，confidence 设为
+"niedrig"，并在 "note" 中说明。
+
+"note" 始终只有一个简短的句子。请用中文书写。`;
+
+const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : lang === "zh" ? SYSTEM_ZH : SYSTEM_DE);
 
 /* Sprache des Nutzers — steuert Prompt, Schema und Fehlermeldungen.
    Die Werte von "confidence" bleiben deutsch, sie sind reine Schlüssel. */
-const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+const langOf = l => {
+  const v = String(l || "de").toLowerCase();
+  return v.startsWith("en") ? "en" : v.startsWith("zh") ? "zh" : "de";
+};
 
 const MSG = {
   de: {
@@ -96,13 +119,52 @@ const MSG = {
     cut:         "The answer was too long and got cut off.",
     refusal:     "Claude declined the request.",
     unusable:    "Claude did not return usable JSON."
+  },
+  zh: {
+    missing_key: "ANTHROPIC_API_KEY 未设置。请在 Vercel 的 Settings → " +
+                 "Environment Variables 中添加后重新部署。",
+    bad_body:    "无法读取请求内容。",
+    no_input:    "既没有收到图片，也没有收到描述。",
+    timeout:     "请求超时。",
+    bad_json:    "Anthropic API 返回的不是有效的 JSON。",
+    cut:         "回答太长，被截断了。",
+    refusal:     "Claude 拒绝了这个请求。",
+    unusable:    "Claude 没有返回可用的 JSON。"
   }
 };
 const msg = (lang, key) => MSG[lang][key];
 
 /* Schema für die Antwort. Alle Felder required — das hält die Grammatik
    klein und sichert die Reihenfolge der Ausgabe. */
-const SCHEMA = lang => lang === "en" ? {
+const SCHEMA = lang => lang === "zh" ? {
+  type: "object",
+  properties: {
+    title:      { type: "string",  description: "这道菜的简短中文名称。" },
+    items: {
+      type: "array",
+      description: "这一餐的各个组成部分。",
+      items: {
+        type: "object",
+        properties: {
+          name:   { type: "string",  description: "组成部分的名称。" },
+          amount: { type: "string",  description: "估算的份量，例如 180 克或 2 个。" },
+          kcal:   { type: "integer", description: "该部分的热量。" }
+        },
+        required: ["name", "amount", "kcal"],
+        additionalProperties: false
+      }
+    },
+    total_kcal: { type: "integer", description: "整餐的总热量。" },
+    pr:         { type: "integer", description: "蛋白质克数。" },
+    ch:         { type: "integer", description: "碳水克数。" },
+    fa:         { type: "integer", description: "脂肪克数。" },
+    confidence: { type: "string",  enum: ["hoch", "mittel", "niedrig"],
+                  description: "hoch = 识别清晰，mittel = 份量为估算，niedrig = 粗略估算。" },
+    note:       { type: "string",  description: "一句话说明所做的假设。" }
+  },
+  required: ["title", "items", "total_kcal", "pr", "ch", "fa", "confidence", "note"],
+  additionalProperties: false
+} : lang === "en" ? {
   type: "object",
   properties: {
     title:      { type: "string",  description: "Short name of the dish in English." },
@@ -236,7 +298,12 @@ export default async function handler(req, res){
       return res.status(400).json({ error: "no_input", message: msg(lang, "no_input") });
     }
 
-    const prompt = lang === "en"
+    const prompt = lang === "zh"
+      ? (image
+          ? (note ? `请分析这一餐。用户的补充说明："${note}"`
+                  : "请分析这一餐。")
+          : `用户这样描述他的一餐："${note}"\n\n请估算热量和营养素。`)
+      : lang === "en"
       ? (image
           ? (note ? `Analyse this meal. Extra info from the user: "${note}"`
                   : "Analyse this meal.")

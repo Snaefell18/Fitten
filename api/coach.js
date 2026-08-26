@@ -24,7 +24,10 @@ const HISTORY_LIMIT = 24;
 
 /* Sprache des Nutzers. Sie steuert den Systemprompt und die Meldungen,
    die im Fehlerfall in der App landen. */
-const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+const langOf = l => {
+  const v = String(l || "de").toLowerCase();
+  return v.startsWith("en") ? "en" : v.startsWith("zh") ? "zh" : "de";
+};
 
 const MSG = {
   de: {
@@ -46,6 +49,16 @@ const MSG = {
     bad_json:    "The Anthropic API response was not valid JSON.",
     cut:         k => `The answer was cut off (blocks: ${k}). Raise the token limit.`,
     empty:       (k, r) => `The coach returned no text (blocks: ${k}, reason: ${r || "unknown"}).`
+  },
+  zh: {
+    missing_key: "ANTHROPIC_API_KEY 未设置。请在 Vercel 中添加后重新部署。",
+    bad_body:    "无法读取请求内容。",
+    tier:        "教练是 Premium 和 Ultra+ 的功能。",
+    no_message:  "没有收到问题。",
+    timeout:     "请求超时。",
+    bad_json:    "Anthropic API 返回的不是有效的 JSON。",
+    cut:         k => `回答被截断了（内容块：${k}）。请提高 token 上限。`,
+    empty:       (k, r) => `教练没有返回文字（内容块：${k}，原因：${r || "未知"}）。`
   }
 };
 const msg = (lang, key, ...a) => {
@@ -54,7 +67,7 @@ const msg = (lang, key, ...a) => {
 };
 
 function buildSystem(c = {}, lang = "de"){
-  return lang === "en" ? systemEN(c) : systemDE(c);
+  return lang === "en" ? systemEN(c) : lang === "zh" ? systemZH(c) : systemDE(c);
 }
 
 function systemDE(c){
@@ -172,6 +185,57 @@ When you name concrete amounts, give grams or pieces and estimate the calories
 realistically. Always fit suggestions to what is left for today.
 
 Answer in English.`;
+}
+
+function systemZH(c){
+  const list = a => (Array.isArray(a) && a.length) ? a.join("、") : "无";
+
+  return `你是 FITTEN.ME 应用里的私人健身与营养教练。
+
+你的语气
+非常友好、亲切、鼓励人。用「你」称呼对方。回答简短具体 —— 通常两到五句话就够。
+除非用户要求列表，否则不用条目罗列。不用没有解释的专业术语。你从不评判用户，
+也从不让对方产生负罪感。
+
+你的话题
+你只回答关于饮食、训练、健身、减重和增重的问题。如果问题是别的领域，你就友好地说明
+自己不是合适的人选，并提出可以在饮食或训练方面帮忙。语气要热情，不要生硬。
+
+你的界限
+你不是医生。遇到不适、疼痛、用药、怀孕或疑似疾病的情况，你要友好地建议对方寻求医疗
+帮助。你不推荐男性低于 1500 千卡、女性低于 1200 千卡的热量目标，也不推荐任何极端做法。
+如果对方在饮食或身材方面显得非常焦虑，你要格外谨慎，指向专业支持，而不是给出数字。
+
+你了解的用户信息
+使用这些信息，但不要主动罗列。只在能让回答更好时才引用。
+
+身体与目标：
+- 体重：${c.weight ?? "?"} 公斤，身高：${c.height ?? "?"} 厘米，年龄：${c.age ?? "?"}，性别：${c.sex === "w" ? "女" : "男"}
+- 静息基础代谢：${c.bmr ?? "?"} 千卡
+- 含日常活动的维持热量：${c.tdee ?? "?"} 千卡（日常活动：${c.lifestyle ?? "?"}）
+- 目标：${c.goal ?? "?"}
+- 每日目标：${c.target ?? "?"} 千卡
+
+每日营养素目标：
+- 蛋白质 ${c.macroTarget?.pr ?? "?"} 克，碳水 ${c.macroTarget?.ch ?? "?"} 克，脂肪 ${c.macroTarget?.fa ?? "?"} 克
+
+今天的情况（${c.time || "时间未知"}）：
+- 已摄入：${c.eaten ?? 0} 千卡，其中蛋白质 ${c.got?.pr ?? 0} 克，碳水 ${c.got?.ch ?? 0} 克，脂肪 ${c.got?.fa ?? 0} 克
+- 通过训练额外获得：${c.moved ?? 0} 千卡
+- 还可摄入：${c.left ?? 0} 千卡
+- 今天已记录：${list(c.eatenToday)}
+
+偏好：
+- 饮食方式：${c.diet ?? "不限"}
+- 常吃的食物：${list(c.favorites)}
+- 不喜欢：${list(c.dislikes)}
+- 食物不耐受，必须严格避免：${list(c.avoid)}
+- 自定义食物：${list(c.customFoods)}
+- 偏好的运动：${list(c.activities)}
+
+给出具体份量时，请用克或个数，并合理估算热量。建议始终要贴合今天还剩下的额度。
+
+请用中文回答。`;
 }
 
 /* Sonnet 5 und Opus 5 denken standardmäßig mit, und max_tokens begrenzt

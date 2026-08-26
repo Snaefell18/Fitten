@@ -59,10 +59,50 @@ Give 2 to 3 suggestions with concrete amounts in grams or pieces. Estimate calor
 and macros realistically. "why" and "note" are exactly one short sentence each — stay
 factual and do not judge how the day has gone. Answer in English.`;
 
-const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : SYSTEM_DE);
+const SYSTEM_ZH = `你是健身应用里的营养顾问，负责建议用户今天还可以吃点什么。
+
+规则：
+1. 不要超出剩余的热量额度。略低一些是好的，明显超出就是错误。
+2. 优先补齐还缺的营养素。如果主要缺蛋白质，就建议高蛋白的选择；如果几乎没有热量额度了，
+   就建议一点小份的东西。
+3. 优先使用列出的常吃食物，把它们组合成实际可行的一餐。只要符合饮食方式，其他食物也可以。
+4. 饮食方式和食物不耐受是硬性要求。纯素不得含任何动物性成分，素食不含肉和鱼，鱼素不含肉。
+   凡是可能含有所列不耐受成分的，一律不要建议。
+5. 不要重复今天已经吃过的东西。
+6. 如果额度已经用完或超出，就返回空列表，并在 "note" 中友好地说明。
+
+给出 2 到 3 条建议，份量要具体到克或个数。热量和营养素要估算得合理。"why" 和 "note"
+各为一个简短的句子 —— 保持客观，不要评价用户今天吃得怎么样。请用中文回答。`;
+
+const SYSTEM = lang => (lang === "en" ? SYSTEM_EN : lang === "zh" ? SYSTEM_ZH : SYSTEM_DE);
 
 /* Die Beschreibungen im Schema steuern die Ausgabesprache mit. */
-const SCHEMA = lang => lang === "en" ? {
+const SCHEMA = lang => lang === "zh" ? {
+  type: "object",
+  properties: {
+    options: {
+      type: "array",
+      description: "两到三条建议；额度用完时为空数组。",
+      items: {
+        type: "object",
+        properties: {
+          name:   { type: "string",  description: "这一餐的中文名称。" },
+          amount: { type: "string",  description: "具体份量，例如 250 克酸奶、100 克浆果。" },
+          kcal:   { type: "integer", description: "该建议的热量。" },
+          pr:     { type: "integer", description: "蛋白质克数。" },
+          ch:     { type: "integer", description: "碳水克数。" },
+          fa:     { type: "integer", description: "脂肪克数。" },
+          why:    { type: "string",  description: "一句话说明为什么现在适合。" }
+        },
+        required: ["name", "amount", "kcal", "pr", "ch", "fa", "why"],
+        additionalProperties: false
+      }
+    },
+    note: { type: "string", description: "一句话总结整体情况。" }
+  },
+  required: ["options", "note"],
+  additionalProperties: false
+} : lang === "en" ? {
   type: "object",
   properties: {
     options: {
@@ -115,7 +155,10 @@ const SCHEMA = lang => lang === "en" ? {
 };
 
 /* Sprache des Nutzers — steuert Prompt, Schema und Fehlermeldungen. */
-const langOf = l => (String(l || "de").toLowerCase().startsWith("en") ? "en" : "de");
+const langOf = l => {
+  const v = String(l || "de").toLowerCase();
+  return v.startsWith("en") ? "en" : v.startsWith("zh") ? "zh" : "de";
+};
 
 const MSG = {
   de: {
@@ -135,6 +178,15 @@ const MSG = {
     cut:         "The answer was too long and got cut off.",
     refusal:     "Claude declined the request.",
     unusable:    "Claude did not return usable JSON."
+  },
+  zh: {
+    missing_key: "ANTHROPIC_API_KEY 未设置。请在 Vercel 中添加后重新部署。",
+    bad_body:    "无法读取请求内容。",
+    timeout:     "请求超时。",
+    bad_json:    "Anthropic API 返回的不是有效的 JSON。",
+    cut:         "回答太长，被截断了。",
+    refusal:     "Claude 拒绝了这个请求。",
+    unusable:    "Claude 没有返回可用的 JSON。"
   }
 };
 const msg = (lang, key) => MSG[lang][key];
@@ -208,11 +260,24 @@ export default async function handler(req, res){
 
     lang = langOf(body.lang);
 
+    const MACRO_TAG = { de:["E","K","F"], en:["P","C","F"], zh:["蛋白","碳水","脂肪"] }[lang];
     const favList = favorites.length
-      ? favorites.map(f => `- ${f.n} (${f.k} kcal/100 g; ${lang === "en" ? "P" : "E"} ${f.pr} / ${lang === "en" ? "C" : "K"} ${f.ch} / F ${f.fa})`).join("\n")
-      : (lang === "en" ? "none given" : "keine angegeben");
+      ? favorites.map(f => `- ${f.n} (${f.k} kcal/100 g; ${MACRO_TAG[0]} ${f.pr} / ${MACRO_TAG[1]} ${f.ch} / ${MACRO_TAG[2]} ${f.fa})`).join("\n")
+      : { de:"keine angegeben", en:"none given", zh:"未提供" }[lang];
 
-    const prompt = lang === "en" ? `Where things stand:
+    const prompt = lang === "zh" ? `目前的情况：
+- 还可摄入：${Math.round(left)} 千卡
+- 还缺的营养素：蛋白质 ${Math.round(macrosLeft.pr || 0)} 克、碳水 ${Math.round(macrosLeft.ch || 0)} 克、脂肪 ${Math.round(macrosLeft.fa || 0)} 克
+- 饮食方式：${diet}
+- 食物不耐受，必须严格避免：${avoid.length ? avoid.join("、") : "无"}
+- 目标：${goal}
+- 当前时间：${time || "未知"}
+- 今天已经吃过：${eatenToday.length ? eatenToday.join("、") : "还没有"}
+
+常吃的食物：
+${favList}
+
+现在还适合吃什么？` : lang === "en" ? `Where things stand:
 - Still available: ${Math.round(left)} kcal
 - Macros still open: ${Math.round(macrosLeft.pr || 0)} g protein, ${Math.round(macrosLeft.ch || 0)} g carbs, ${Math.round(macrosLeft.fa || 0)} g fat
 - Way of eating: ${diet}
