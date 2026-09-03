@@ -516,10 +516,20 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .qitem .t-txt .t-sub{font-size:12.5px; color:var(--ink-3); margin-top:1px}
 .qitem .t-val{font-size:14px; font-weight:700; color:var(--blue-600); white-space:nowrap}
 
+/* Shake: Zeile mit Mengeneingabe. Das Feld bleibt schmal, damit der Name
+   den Platz bekommt; die Einheit steht als Kürzel dahinter. */
+.sh-row{cursor:default}
+.sh-row:active{transform:none}
+.sh-row .t-sub b{font-weight:750; color:var(--blue-600)}
+.sh-amt{display:flex; align-items:center; gap:5px; flex:none}
+.sh-amt input{width:74px; padding:9px 10px; text-align:right; font-size:15px; font-weight:650;
+  border-radius:11px; font-variant-numeric:tabular-nums}
+.sh-amt em{font-style:normal; font-size:12.5px; font-weight:700; color:var(--ink-3); width:18px}
+
 .seg{display:flex; gap:4px; padding:4px; border-radius:14px; background:rgba(255,255,255,.62);
   border:1px solid rgba(255,255,255,.9); margin-bottom:16px}
-.seg button{flex:1; padding:10px 8px; border-radius:11px; font-size:14px; font-weight:650;
-  color:var(--ink-2); transition:all .18s}
+.seg button{flex:1; padding:10px 6px; border-radius:11px; font-size:14px; font-weight:650;
+  color:var(--ink-2); white-space:nowrap; transition:all .18s}
 .seg button.on{background:#fff; color:var(--ink); box-shadow:var(--shadow-s)}
 
 /* Auswahl-Block: oben das Gewählte, darunter die aufklappbare Gesamtliste */
@@ -542,6 +552,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   background:rgba(255,255,255,.7); border:1px solid var(--glass-line); box-shadow:var(--shadow-s)}
 .own+.own{margin-top:8px}
 .own .t-txt{flex:1; min-width:0}
+.own button.t-txt{text-align:left; padding:0}
 .own .t-ttl{display:block; font-size:14.5px; font-weight:650}
 .own .t-sub{display:block; font-size:12px; color:var(--ink-3); margin-top:2px}
 .own .del{width:28px; height:28px; border-radius:50%; display:grid; place-items:center;

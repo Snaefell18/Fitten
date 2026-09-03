@@ -148,6 +148,19 @@ const LIFESTYLE = [
   { id:"manual",n:"Manuell",            s:"Eigener Zuschlag in Kalorien",  f:null }
 ];
 
+/* Shake-Zutaten. Werte je 100 g bzw. 100 ml, d = Menge, die beim Erstellen
+   eines Shakes schon eingetragen ist. Diese Liste ist nur die Vorbelegung:
+   Beim ersten Öffnen übernimmt der Nutzer sie, danach sind es seine eigenen
+   Daten, die er in den Einstellungen ändern kann. tk ist der Textschlüssel
+   für den Namen und landet nie im Profil. */
+const SHAKE_SEED = [
+  { id:"sh_oatmilk",    tk:"shake.n.oatmilk",    k:44,  pr:0.8,  ch:5.6,  fa:1.8, u:"ml", d:120 },
+  { id:"sh_lecithin",   tk:"shake.n.lecithin",   k:760, pr:0.3,  ch:9,    fa:91,  u:"g",  d:10  },
+  { id:"sh_maca",       tk:"shake.n.maca",       k:342, pr:11.9, ch:67.2, fa:0,   u:"g",  d:15  },
+  { id:"sh_whey",       tk:"shake.n.whey",       k:359, pr:84,   ch:2.6,  fa:1.4, u:"g",  d:30  },
+  { id:"sh_citrulline", tk:"shake.n.citrulline", k:350, pr:0,    ch:0,    fa:0,   u:"g",  d:10  }
+];
+
 /* ─────────────────  3. FIREBASE  ───────────────── */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
@@ -377,6 +390,12 @@ function foodsFor(p){
   const ex = p.excluded || [];
   return allFoods(p).filter(f => fitsDiet(f, p.diet || "all") && !ex.includes(f.id));
 }
+
+/* Zutaten des Nutzers. Wer noch keine hat, bekommt die Vorbelegung in der
+   gerade aktiven Sprache. Eine leer gespeicherte Liste bleibt leer — sonst
+   käme das Gelöschte beim nächsten Öffnen zurück. */
+const shakeSeed  = () => SHAKE_SEED.map(({ tk, ...rest }) => ({ ...rest, n: t(tk) }));
+const shakeItems = p => p.shakeItems ?? shakeSeed();
 
 /* Für vergangene Tage gilt das Ziel, das an dem Tag galt — sonst würden sich
    alte Bilanzen rückwirkend verschieben, sobald Gewicht oder Ziel sich ändern.
@@ -1561,7 +1580,8 @@ function openManual(){
 
   openSheet(t("mn.title"), `
     <div class="seg"><button class="on" data-tab="fav">${t("tab.fav")}</button>
-      <button data-tab="all">${t("tab.all")}</button><button data-tab="free">${t("tab.free")}</button></div>
+      <button data-tab="all">${t("tab.all")}</button><button data-tab="shake">${t("tab.shake")}</button>
+      <button data-tab="free">${t("tab.free")}</button></div>
 
     <div data-pane="fav"><div class="quick">${favs.length?list(favs):`<p class="log-empty">${t("tab.noFav")}</p>`}</div></div>
 
@@ -1569,6 +1589,8 @@ function openManual(){
       <div class="field search"><input id="mn-search" type="text" placeholder="${t("mn.search")}"></div>
       <div class="quick" id="mn-list">${list(rest)}</div>
     </div>
+
+    <div data-pane="shake" hidden>${shakeHTML()}</div>
 
     <div data-pane="free" hidden>
       <div class="field"><label for="mn-name">${t("f.name")}</label>
@@ -1599,6 +1621,8 @@ function openManual(){
     bindFoods();
   };
 
+  bindShake();
+
   $("#mn-free").onclick = async () => {
     const name = $("#mn-name").value.trim() || t("ph.meal");
     const kcal = +$("#mn-kcal").value;
@@ -1610,6 +1634,72 @@ function openManual(){
   };
 
   bindFoods();
+}
+
+/* ── Shake ──────────────────────────────────────────────────────────
+   Je Zutat eine Zeile mit Menge. Die Summe rechnet bei jeder Eingabe neu,
+   erfasst wird am Ende ein einziger Eintrag. */
+
+function shakeHTML(){
+  const items = shakeItems(S.profile);
+  if (!items.length) return `<p class="log-empty">${t("shake.empty")}</p>`;
+  return `
+    <div class="quick">${items.map(i => `
+      <div class="qitem sh-row" data-id="${i.id}">
+        <span class="t-txt"><span class="t-ttl">${esc(i.n)}</span>
+          <span class="t-sub">${t("shake.per100", i.k, i.u)} · <b data-kc>0</b> kcal</span></span>
+        <span class="sh-amt"><input type="number" inputmode="decimal" min="0" step="1"
+          value="${i.d}" aria-label="${esc(i.n)}"><em>${i.u}</em></span>
+      </div>`).join("")}
+    </div>
+    <div class="res-total" style="margin-top:14px">
+      <span style="font-weight:650">${t("shake.total")}</span><b id="sh-k">0</b></div>
+    <p class="hint" style="text-align:center" id="sh-m"></p>
+    <button class="btn btn-primary" id="sh-add" style="margin-top:14px">${t("btn.add")}</button>`;
+}
+
+/* Liefert die aktuell eingetragenen Zutaten samt Summe */
+function shakeState(){
+  const items = shakeItems(S.profile);
+  const rows = $$("#sheet-body .sh-row").map(el => {
+    const it = items.find(i => i.id === el.dataset.id);
+    const g  = Math.max(0, +$("input", el).value || 0);
+    return { el, it, g };
+  }).filter(r => r.it);
+  const sum = { kcal:0, pr:0, ch:0, fa:0 };
+  rows.forEach(r => {
+    sum.kcal += r.it.k * r.g / 100;
+    MACROS.forEach(x => sum[x.key] += (r.it[x.key] || 0) * r.g / 100);
+  });
+  return { rows, sum };
+}
+
+function bindShake(){
+  const box = $("#sheet-body [data-pane='shake']");
+  if (!box || !$("#sh-add")) return;
+
+  const sync = () => {
+    const { rows, sum } = shakeState();
+    rows.forEach(r => $("[data-kc]", r.el).textContent = num(r.it.k * r.g / 100));
+    $("#sh-k").textContent = num(sum.kcal);
+    $("#sh-m").textContent = MACROS.map(x => `${num(sum[x.key])} g ${x.n}`).join(" · ");
+  };
+  $$("input", box).forEach(i => i.oninput = sync);
+  sync();
+
+  $("#sh-add").onclick = async () => {
+    const { rows, sum } = shakeState();
+    const used = rows.filter(r => r.g > 0);
+    if (!used.length) { toast(t("shake.errEmpty")); return; }
+    const macro = {};
+    MACROS.forEach(x => macro[x.key] = +sum[x.key].toFixed(1));
+    await addEntry("meals", {
+      name: t("shake.name"),
+      detail: used.map(r => `${num(r.g)} ${r.it.u} ${r.it.n}`).join(", "),
+      kcal: Math.round(sum.kcal), ...macro, src:"shake"
+    });
+    closeSheet(); toast(t("sg.logged", num(sum.kcal)));
+  };
 }
 
 function bindFoods(){
@@ -1745,6 +1835,7 @@ function openSettings(){
     foods: [...p.foods],
     excluded: [...(p.excluded || [])],
     customFoods: [...(p.customFoods || [])],
+    shakeItems: shakeItems(p).map(i => ({ ...i })),
     customActivities: [...(p.customActivities || [])],
     customDislikes: [...(p.customDislikes || [])]
   };
@@ -1863,6 +1954,14 @@ function openSettings(){
       <div id="st-ownact"></div>
       <button class="pick-open" id="act-add" style="margin-top:10px">
         <span>${t("st.ownActAdd")}</span><span class="pick-count">+</span></button>
+    </div>
+
+    <div class="settings-grp">
+      <p class="eyebrow">${t("st.shake")}</p>
+      <div id="st-shake"></div>
+      <button class="pick-open" id="shake-add" style="margin-top:10px">
+        <span>${t("st.shakeAdd")}</span><span class="pick-count">+</span></button>
+      <p class="hint">${t("st.shakeHint")}</p>
     </div>
 
     <div class="settings-grp">
@@ -2047,6 +2146,35 @@ function openSettings(){
       repaintPickers();
     });
   }
+
+  /* ── Shake-Zutaten ── */
+  function paintShake(){
+    $("#st-shake").innerHTML = draft.shakeItems.length
+      ? draft.shakeItems.map(i => `<div class="own">
+          <button class="t-txt" data-edit="${i.id}">
+            <span class="t-ttl">${esc(i.n)}</span>
+            <span class="t-sub">${t("st.shakeSub", i.k, i.u, num(i.d))}</span></button>
+          <button class="del" data-id="${i.id}" aria-label="${t("a.remove")}">${X}</button></div>`).join("")
+      : `<p class="pick-none">${t("st.shakeNone")}</p>`;
+
+    $$("#st-shake .del").forEach(b => b.onclick = () => {
+      draft.shakeItems = draft.shakeItems.filter(i => i.id !== b.dataset.id);
+      paintShake();
+    });
+    $$("#st-shake [data-edit]").forEach(b => b.onclick = () => {
+      const item = draft.shakeItems.find(i => i.id === b.dataset.edit);
+      openShakeItem(item, changed => {
+        Object.assign(item, changed);
+        openSettingsKeep(draft);
+      });
+    });
+  }
+  paintShake();
+
+  $("#shake-add").onclick = () => openShakeItem(null, item => {
+    draft.shakeItems.push(item);
+    openSettingsKeep(draft);
+  });
 
   $("#act-add").onclick = () => openOwnAct(a => {
     draft.customActivities.push(a);
@@ -2314,6 +2442,66 @@ function openOwnFood(done){
     });
   };
   $("#of-back").onclick = () => openSettings();
+}
+
+/* Formular für eine Shake-Zutat. item = null legt eine neue an. */
+function openShakeItem(item, done){
+  const v = item || { n:"", k:0, pr:0, ch:0, fa:0, u:"g", d:0 };
+  const unit = () => $("#si-u").value;
+
+  const paint = () => {
+    openSheet(item ? t("si.titleEdit") : t("si.titleNew"), `
+      <div class="field"><label for="si-n">${t("f.name")}</label>
+        <input id="si-n" type="text" placeholder="${t("si.namePh")}" value="${esc(v.n)}"></div>
+      <div class="row">
+        <div class="field"><label for="si-u">${t("si.unit")}</label>
+          <select id="si-u"><option value="g" ${v.u==="g"?"selected":""}>${t("si.unitG")}</option>
+            <option value="ml" ${v.u==="ml"?"selected":""}>${t("si.unitMl")}</option></select></div>
+        <div class="field"><label for="si-k">${t("si.kcal", v.u)}</label>
+          <input id="si-k" type="number" inputmode="numeric" value="${v.k}"></div>
+      </div>
+      <p class="group-label">${t("si.macros", v.u)}</p>
+      <div class="row">
+        <div class="field"><label for="si-pr">${t("macro.prShort")}</label>
+          <input id="si-pr" type="number" inputmode="decimal" value="${v.pr}"></div>
+        <div class="field"><label for="si-ch">${t("macro.chShort")}</label>
+          <input id="si-ch" type="number" inputmode="decimal" value="${v.ch}"></div>
+        <div class="field"><label for="si-fa">${t("macro.faShort")}</label>
+          <input id="si-fa" type="number" inputmode="decimal" value="${v.fa}"></div>
+      </div>
+      <div class="field"><label for="si-d">${t("si.default", v.u)}</label>
+        <input id="si-d" type="number" inputmode="numeric" value="${v.d}"></div>
+      <p class="hint">${t("si.hint")}</p>
+    `, `<button class="btn btn-primary" id="si-save">${item ? t("btn.save") : t("btn.create")}</button>
+        <button class="btn btn-ghost" id="si-back">${t("btn.cancel")}</button>`);
+
+    // Einheit wechseln: Beschriftungen ziehen mit, Eingaben bleiben stehen
+    $("#si-u").onchange = () => {
+      Object.assign(v, read());
+      v.u = unit();
+      paint();
+    };
+    $("#si-save").onclick = () => {
+      const d = read();
+      if (!d.n) { toast(t("si.errName")); return; }
+      if (!(d.k >= 0 && d.k <= 900)) { toast(t("si.errKcal")); return; }
+      if (!(d.d >= 0 && d.d <= 2000)) { toast(t("si.errAmount")); return; }
+      done(item ? d : { id: "sh_" + crypto.randomUUID().slice(0,8), ...d });
+    };
+    $("#si-back").onclick = () => openSettings();
+  };
+
+  const read = () => ({
+    n: $("#si-n").value.trim(),
+    u: unit(),
+    k: +$("#si-k").value || 0,
+    pr: Math.max(0, +$("#si-pr").value || 0),
+    ch: Math.max(0, +$("#si-ch").value || 0),
+    fa: Math.max(0, +$("#si-fa").value || 0),
+    d: +$("#si-d").value || 0
+  });
+
+  paint();
 }
 
 /* Tageswechsel abfangen, wenn die App im Hintergrund lag */
