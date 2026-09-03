@@ -870,3 +870,57 @@ Anthropic PBC，548 Market St, PMB 90375, San Francisco, CA 94104, 美国，用�
 决定，不要仅凭它们做判断。</p>` }
   })
 };
+
+/* ── Shake: Zutaten und Erfassung ── */
+Object.assign(STRINGS, {
+  "tab.shake":      { de:"Shake",  en:"Shake", zh:"奶昔" },
+  "shake.name":     { de:"Shake",  en:"Shake", zh:"奶昔" },
+  "shake.total":    { de:"Shake gesamt", en:"Shake total", zh:"奶昔总计" },
+  "shake.empty":    { de:"Noch keine Zutaten. Du legst sie in den Einstellungen an.",
+                      en:"No ingredients yet. You add them in the settings.",
+                      zh:"还没有配料。可以在设置里添加。" },
+  "shake.per100":   { de:(k,u)=>`${k} kcal / 100 ${u}`,
+                      en:(k,u)=>`${k} kcal / 100 ${u}`,
+                      zh:(k,u)=>`${k} kcal / 100 ${u}` },
+  "shake.errEmpty": { de:"Bitte bei mindestens einer Zutat eine Menge eintragen.",
+                      en:"Please enter an amount for at least one ingredient.",
+                      zh:"请至少为一种配料填写用量。" },
+
+  "st.shake":     { de:"Shake-Zutaten",  en:"Shake ingredients", zh:"奶昔配料" },
+  "st.shakeAdd":  { de:"Zutat anlegen",  en:"Add an ingredient", zh:"添加配料" },
+  "st.shakeNone": { de:"Noch keine Zutaten.", en:"No ingredients yet.", zh:"还没有配料。" },
+  "st.shakeHint": { de:"Diese Zutaten stehen beim Erfassen unter „Shake“ zur Auswahl. Antippen zum Bearbeiten.",
+                    en:"These ingredients appear under “Shake” when logging. Tap one to edit it.",
+                    zh:"记录餐食时，这些配料会出现在「奶昔」标签下。点击即可编辑。" },
+  "st.shakeSub":  { de:(k,u,d)=>`${k} kcal / 100 ${u} · Standard ${d} ${u}`,
+                    en:(k,u,d)=>`${k} kcal / 100 ${u} · default ${d} ${u}`,
+                    zh:(k,u,d)=>`${k} kcal / 100 ${u} · 默认 ${d} ${u}` },
+
+  "si.titleNew":  { de:"Neue Zutat",       en:"New ingredient",  zh:"新配料" },
+  "si.titleEdit": { de:"Zutat bearbeiten", en:"Edit ingredient", zh:"编辑配料" },
+  "si.namePh":    { de:"z. B. Hafermilch", en:"e.g. oat milk",   zh:"例如燕麦奶" },
+  "si.unit":      { de:"Einheit",          en:"Unit",            zh:"单位" },
+  "si.unitG":     { de:"Gramm (g)",        en:"Grams (g)",       zh:"克（g）" },
+  "si.unitMl":    { de:"Milliliter (ml)",  en:"Millilitres (ml)",zh:"毫升（ml）" },
+  "si.kcal":      { de:u=>`Kalorien je 100 ${u}`, en:u=>`Calories per 100 ${u}`, zh:u=>`每 100 ${u} 的热量` },
+  "si.macros":    { de:u=>`Makros je 100 ${u}`,   en:u=>`Macros per 100 ${u}`,   zh:u=>`每 100 ${u} 的营养素` },
+  "si.default":   { de:u=>`Standardmenge (${u})`, en:u=>`Default amount (${u})`, zh:u=>`默认用量（${u}）` },
+  "si.hint":      { de:"Die Standardmenge ist beim Erstellen eines Shakes schon eingetragen.",
+                    en:"The default amount is pre-filled when you build a shake.",
+                    zh:"创建奶昔时会自动填入默认用量。" },
+  "si.errName":   { de:"Bitte eine Bezeichnung eintragen.", en:"Please enter a name.", zh:"请填写名称。" },
+  "si.errKcal":   { de:"Kalorien zwischen 0 und 900 je 100 g oder ml eintragen.",
+                    en:"Enter between 0 and 900 calories per 100 g or ml.",
+                    zh:"请填写每 100 克或毫升 0 到 900 之间的热量。" },
+  "si.errAmount": { de:"Standardmenge zwischen 0 und 2000 eintragen.",
+                    en:"Enter a default amount between 0 and 2000.",
+                    zh:"请填写 0 到 2000 之间的默认用量。" },
+
+  /* Namen der voreingestellten Zutaten. Sie werden einmalig beim ersten
+     Öffnen übernommen und sind danach ganz normale eigene Daten. */
+  "shake.n.oatmilk":    { de:"Hafermilch",            en:"Oat milk",              zh:"燕麦奶" },
+  "shake.n.lecithin":   { de:"Lecithin",              en:"Lecithin",              zh:"卵磷脂" },
+  "shake.n.maca":       { de:"Maca",                  en:"Maca",                  zh:"玛卡" },
+  "shake.n.whey":       { de:"Whey Protein Natural",  en:"Whey protein, natural", zh:"乳清蛋白（原味）" },
+  "shake.n.citrulline": { de:"L-Citrullin",           en:"L-citrulline",          zh:"L-瓜氨酸" }
+});
